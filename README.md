@@ -46,6 +46,9 @@ Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden
 2. IPv4 und IPv6 Konfigurationen werden statisch an einen Adapter vergeben. DHCP wird nicht weiter genutzt.
 3. Änderungen werden mit `sudo netplan apply` angewendet.
 
+Für IPv4 und IPv6 wurde für beide Server ein rDNS gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die Domain Einstellungen übernommen. So müssen wir uns die IP Adressen für SSH 
+und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sEncrypt erhältlich. 
+
 ** Cloud Server - NextCloud & phpldap
 
 ** LDAP Server
