@@ -1,21 +1,22 @@
-* NextCloud mit LDAP ínkl. WEBGUI
+# NextCloud mit LDAP ínkl. WEBGUI
 
 von Robert Hartings und Alexander Niersmann
 
 
-* Server
+# Server
 
 Server werden von NetCup bezogen. Ein Server wird für LDAP, der andere Server wird für NextCloud und phpldap genutzt. Diese machen wir, damit LDAP und die anderen Systeme nicht auf einer Maschiene laufen um so eine wirkliche LDAP Nutzung zu simulieren.
 
-** Serverhardware
+## Serverhardware
 
 | Hardware | Value |
+|---|---|
 | CPU | 1vCore |
 | RAM | 2 GB |
 | DISK | 20 GB SSD (RAID 10) |
 | Network Speed | 1000 MBit/s |
 
-* Serverkonfiguration
+# Serverkonfiguration
 
 Neuste Updates wurden installiert:
 
@@ -52,9 +53,9 @@ Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden
 Für IPv4 und IPv6 wurde für beide Server ein rDNS gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die Domain Einstellungen übernommen. So müssen wir uns die IP Adressen für SSH 
 und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sEncrypt erhältlich. 
 
-** Cloud Server - NextCloud & phpldap
+## Cloud Server - NextCloud & phpldap
 
-** LDAP Server
+## LDAP Server
 
 Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen, um die Angriffsvektoren zu minimieren. Damit ein SSH Zugriff weiter möglich ist wurde eine Regel für OpenSSH erstellt.
 1. `sudo ufw defualt deny incoming` - Aller eingehender Traffic wird geblockt.
