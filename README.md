@@ -41,6 +41,9 @@ In der SSH-Config den Login von Root unterbinden, umso einen mögliches Brutforc
 2. Zeile `PermitRootLogin` von `yes` auf `no` ändern, damit ein Login via SSH auf Root nicht mehr möglich ist.
 3. Falls alle Nutzer ssh-Keys hinterlegt haben, kann `PasswordAuthentication` von `yes` auf `no` gesetzt werden, da jedoch nur Passwort genutzt worden ist bleibt der Wert auf `yes`
 
+Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `cloud` und der LDAP Server den Hostname `ldap`.
+1. Hostname setzen durch `sudo hostnamectl set-hostname HOSTNAME`
+
 Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden. IPv6 wird vorrausschauend aktiviert, es könnte gebraucht werden.
 1. `sudo nano /etc/netplan/01-netcfg.yaml`
 2. IPv4 und IPv6 Konfigurationen werden statisch an einen Adapter vergeben. DHCP wird nicht weiter genutzt.
