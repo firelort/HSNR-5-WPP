@@ -59,7 +59,7 @@ und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sE
 ## LDAP Server
 
 Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen, um die Angriffsvektoren zu minimieren. Damit ein SSH Zugriff weiter möglich ist wurde eine Regel für OpenSSH erstellt.
-1. `sudo ufw defualt deny incoming` - Aller eingehender Traffic wird geblockt.
+1. `sudo ufw default deny incoming` - Aller eingehender Traffic wird geblockt.
 2. `sudo ufw allow OpenSSH` - Setzt die Regeln für IPv4 und IPv6
 
 Im folgenden muss der Traffic des Cloud Servers erlaubt werden, damit dieser eine LDAP Anbindug einrichten und nutzen kann.
