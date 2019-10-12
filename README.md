@@ -41,6 +41,7 @@ In der SSH-Config den Login von Root unterbinden, umso einen mögliches Brutforc
 1. `sudo nano /etc/ssh/sshd_config`
 2. Zeile `PermitRootLogin` von `yes` auf `no` ändern, damit ein Login via SSH auf Root nicht mehr möglich ist.
 3. Falls alle Nutzer ssh-Keys hinterlegt haben, kann `PasswordAuthentication` von `yes` auf `no` gesetzt werden, da jedoch nur Passwort genutzt worden ist bleibt der Wert auf `yes`
+4. SSH (Deamon) neustarten mit `sudo systemctl restart ssh`, damit die Änderungen übernommen werden.
 
 Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `cloud` und der LDAP Server den Hostname `ldap`.
 1. Hostname setzen durch `sudo hostnamectl set-hostname HOSTNAME`
