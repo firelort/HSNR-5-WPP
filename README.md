@@ -63,4 +63,46 @@ Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen
 2. `sudo ufw allow OpenSSH` - Setzt die Regeln für IPv4 und IPv6
 3. `sudo ufw enable` - Schaltet die Firewall aktiv
 
-Im folgenden muss der Traffic des Cloud Servers erlaubt werden, damit dieser eine LDAP Anbindug einrichten und nutzen kann.
+Installation von LDAP / OpenLDAP
+1. `sudo apt update` - Packet Index aktuallisieren
+2. `sudo apt install slapd ldap-utils` - Installation von LDAP
+3. `sudo dpkg-reconfigure slapd` - Rekonfiguration von slapd Packet
+	3.1 DNS Domain Name: hartlab.de
+	3.2 Organisationsname: hartlab
+	3.3 Administrator Passwort: Sichers Passwort vergeben
+	3.4 Database backend: MDB, da empfohlen
+	3.5 Datenbank beim löschen entfernen: Nein, damit DB auch nach nem reinstall bestehen bleibt
+	3.6 Alte Datenbank verschieben: Ja, damit keine Konfigurationsprobleme auftreten
+4. Installation mit `ldapwhoami -H ldap:// -x` prüfen
+
+Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit dieser eine LDAP Anbindug einrichten und nutzen kann.
+1. `sudo ufw allow from 2a03:4000:21:848::1 to any port ldap` - LDAP über IPv6
+2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4
+3. `sudo ufw status` - Firewall Einstellungen prüfen
+
+Zertifikat von Let's Encrypt
+
+Das Let's Encrypt Zertifikat wird genutzt um die Verbindungen zum LDAP Server zu verschlüsseln.
+
+Das Zertifikat wird von Let's Encrypt bezogen, da es dort kostenfrei ist. Das Zertifikat ist hierbei jedoch nur für 90 Tage 
+gültig und muss im besten Fall 30 Tage vorher neubezogen werden.
+
+Für die Generierung / Erstellung des Zertifikats wird der von Let's Encrypt empfohlene CertBot genutzt.
+1. `sudo ufw allow 80` - Port 80 in der Firewall freigegeben, damit Let's Encrypt mit diesem Server kommunizieren kann.
+2. `sudo apt update`
+3. `sudo apt install certbot` - Certbot installieren
+4. `sudo certbot certonly --standalone` - Nur Zertifiakt beziehen und keine Konfiguration vornehmen
+5. `sudo ls  /etc/letsencrypt/live` - Prüfen ob Zertifikat vorhanden ist
+6. `sudo ufw delete allow 80` - Port 80 in der Firewall wieder auf default setzen, in diesem Fall auf deny
+
+Zertifikate in Standard SLL Verzeichnis von Linux kopieren, damit der slapd Deamon Zugang erhält.
+1. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/cert.pem /etc/ssl/certs/ldap.hartlab.de.cert.pem`
+2. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/fullchain.pem /etc/ssl/certs/ldap.hartlab.de.fullchain.pem`
+3. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/privkey.pem /etc/ssl/private/ldap.hartlab.de.privkey.pem`
+
+Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält, da die Let's Encrypt Zertifikate nur von Root 
+gelesen werden können.
+1. `chown :ssl-cert /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Gruppe ssl-cert der Datei hinzufügen
+2. `chmopd 640 /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
+Gruppe die Datei lesen kann
+3. `systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
