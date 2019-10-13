@@ -1,4 +1,4 @@
-# NextCloud mit LDAP ínkl. WEBGUI
+# NextCloud mit LDAP inkl. WEBGUI
 
 von Robert Hartings und Alexander Niersmann
 
@@ -110,3 +110,52 @@ Gruppe die Datei lesen kann
 4. `sudo usermod -aG ssl-cert openldap` - Nutzer openldap der Gruppe ssl-cert hinzufügen, damit das Zertifikat gelesen werden 
 kann
 5. `sudo systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
+
+slapd 
+
+Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
+nutzt
+1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:
+
+```
+dn: cn=config
+changetype: modify
+add: olcTLSCACertificateFile
+olcTLSCACertificateFile: /etc/ssl/certs/ldap.hartlab.de.fullchain.pem
+-
+add: olcTLSCertificateFile
+olcTLSCertificateFile: /etc/ssl/certs/ldap.hartlab.de.cert.pem
+-
+add: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /etc/ssl/private/ldap.hartlab.de.privkey.pem
+
+```
+
+2. Datei speichern und schließen
+
+3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ssl.ldif` anwenden, ein reload des slapd Deamons ist nicht 
+notwendig, da ldapmodify dieses sleber macht
+4. Mit `ldapwhoami -H ldap://ldap.hartlab.de -x -ZZ` die Konfiguration prüfen, der Hostname ist notwendig, da das Zertifikat 
+abgeprüft wird.
+
+STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
+1. Änderung der Hosts Datei, damit der FQDN richtig gesetzt ist mit `sudo nano /etc/hosts`
+2. Die Zeile `127.0.1.1` finden und durch `127.0.1.1 ldap.hartlab.de ldap` erstezen, so ist der FQDN richtig gesetzt
+3. Herausfinden, welcher Eintrag verändert werden soll `sudo ldapsearch -H ldapi:// -Y EXTERNAL -b "cn=config" -LLL -Q "(olc$
+4. Ausgabe sollte wie folgt aussehen
+```
+dn: olcDatabase={1}mdb,cn=config
+olcSuffix: dc=hartlab,dc=de
+```
+5. Erstellen einer LDIF Datei um Änderungen vorzubereiten `nano ~/tls.ldif` und dem Inhalt:
+```
+dn: olcDatabase={1}mdb,cn=config
+changetype: modify
+add: olcSecurity
+olcSecurity: tls=1
+```
+6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f tls.ldif`
+7. Prüfen ob nur noch eine Verbindung mit SSL möglich ist
+	5.1 `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL dn`, sollte mit der Fehlermeldung `TLS confidentiality 
+required` scheitern
+	5.2 `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL -Z dn`, sollte ohne Fehlermeldung funktionieren
