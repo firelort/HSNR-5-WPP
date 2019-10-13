@@ -80,7 +80,7 @@ Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit diese
 2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4
 3. `sudo ufw status` - Firewall Einstellungen prüfen
 
-Zertifikat von Let's Encrypt
+##### Zertifikat von Let's Encrypt
 
 Das Let's Encrypt Zertifikat wird genutzt um die Verbindungen zum LDAP Server zu verschlüsseln.
 
@@ -111,12 +111,11 @@ Gruppe die Datei lesen kann
 kann
 5. `sudo systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
 
-slapd 
+##### slapd mit Zertifikat konfigurieren 
 
 Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
 nutzt
 1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:
-
 ```
 dn: cn=config
 changetype: modify
@@ -130,9 +129,7 @@ add: olcTLSCertificateKeyFile
 olcTLSCertificateKeyFile: /etc/ssl/private/ldap.hartlab.de.privkey.pem
 
 ```
-
 2. Datei speichern und schließen
-
 3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ssl.ldif` anwenden, ein reload des slapd Deamons ist nicht 
 notwendig, da ldapmodify dieses sleber macht
 4. Mit `ldapwhoami -H ldap://ldap.hartlab.de -x -ZZ` die Konfiguration prüfen, der Hostname ist notwendig, da das Zertifikat 
@@ -156,6 +153,6 @@ olcSecurity: tls=1
 ```
 6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f tls.ldif`
 7. Prüfen ob nur noch eine Verbindung mit SSL möglich ist
-	5.1 `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL dn`, sollte mit der Fehlermeldung `TLS confidentiality 
+	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL dn`, sollte mit der Fehlermeldung `TLS confidentiality 
 required` scheitern
-	5.2 `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL -Z dn`, sollte ohne Fehlermeldung funktionieren
+	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL -Z dn`, sollte ohne Fehlermeldung funktionieren
