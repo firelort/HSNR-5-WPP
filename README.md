@@ -102,7 +102,7 @@ Zertifikate in Standard SSL Verzeichnis von Linux kopieren, damit der slapd Deam
 
 Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält, da die Let's Encrypt Zertifikate nur von Root 
 gelesen werden können.
-1. `chown :ssl-cert /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Gruppe ssl-cert der Datei hinzufügen
-2. `chmopd 640 /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
+1. `sudo chown :ssl-cert /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Gruppe ssl-cert der Datei hinzufügen
+2. `sudo chmopd 640 /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
 Gruppe die Datei lesen kann
-3. `systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
+3. `sudo systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
