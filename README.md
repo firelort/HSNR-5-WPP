@@ -95,7 +95,7 @@ Für die Generierung / Erstellung des Zertifikats wird der von Let's Encrypt emp
 5. `sudo ls  /etc/letsencrypt/live` - Prüfen ob Zertifikat vorhanden ist
 6. `sudo ufw delete allow 80` - Port 80 in der Firewall wieder auf default setzen, in diesem Fall auf deny
 
-Zertifikate in Standard SLL Verzeichnis von Linux kopieren, damit der slapd Deamon Zugang erhält.
+Zertifikate in Standard SSL Verzeichnis von Linux kopieren, damit der slapd Deamon Zugang erhält.
 1. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/cert.pem /etc/ssl/certs/ldap.hartlab.de.cert.pem`
 2. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/fullchain.pem /etc/ssl/certs/ldap.hartlab.de.fullchain.pem`
 3. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/privkey.pem /etc/ssl/private/ldap.hartlab.de.privkey.pem`
