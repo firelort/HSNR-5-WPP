@@ -94,12 +94,12 @@ Installation von LDAP / OpenLDAP
 1. `sudo apt update` - Packet Index aktuallisieren
 2. `sudo apt install slapd ldap-utils` - Installation von LDAP
 3. `sudo dpkg-reconfigure slapd` - Rekonfiguration von slapd Packet
-	3.1 DNS Domain Name: hartlab.de
-	3.2 Organisationsname: hartlab
-	3.3 Administrator Passwort: Sichers Passwort vergeben
-	3.4 Database backend: MDB, da empfohlen
-	3.5 Datenbank beim löschen entfernen: Nein, damit DB auch nach nem reinstall bestehen bleibt
-	3.6 Alte Datenbank verschieben: Ja, damit keine Konfigurationsprobleme auftreten
+	* DNS Domain Name: hartlab.de
+	* Organisationsname: hartlab
+	* Administrator Passwort: Sichers Passwort vergeben
+	* Database backend: MDB, da empfohlen
+	* Datenbank beim löschen entfernen: Nein, damit DB auch nach nem reinstall bestehen bleibt
+	* Alte Datenbank verschieben: Ja, damit keine Konfigurationsprobleme auftreten
 4. Installation mit `ldapwhoami -H ldap:// -x` prüfen
 
 Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit dieser eine LDAP Anbindug einrichten und nutzen kann.
