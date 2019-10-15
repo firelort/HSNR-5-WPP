@@ -60,7 +60,7 @@ und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sE
 
 Für das Webinterface wurde eine weiter subdomain (wldap.hartlab.de) auf die IPs des Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
 
-#### Installation von phpldapadmin
+#### Installation von phpLDAPadmin
 
 Das Repository im Ubuntu/Debian Packetmanager kann nicht genutzt werden, da dieses noch aus dem Jahr 2013 stammt und Probleme mit PHP 7.* hat.
 
@@ -81,7 +81,59 @@ Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
 	* `$servers->setValue('login','bind_pass','')` - Leer lassen und auskommentieren, da keine Funktionalität gewonnen wird und nur das Passwort im Klartext in einer Datei steht.
 	* `$servers->setValue('server','tls',true);` - TLS aktivieren, damit Interface und LDAP Server verschlüsselt kommunizieren könne. Der LDAP Server lehnt alle nicht TLS Verbindungen ab
 
+#### NGINX & phpLDAPadmin
+
 Im folgenden muss eine NGINX Konfig angelegt werden, damit die Subdomain wldap.hartlab.de auf die phpLDAPadmin Anwendung zeigt.
+
+Dazu legen wir eine neue config Datei im `conf.d` Ordner mit `sudo nano /etc/nginx/conf.d/ldapadmin.conf` an. Folgender Inhalt sollte übernommen werden
+```
+server {
+	server_name wldap.hartlab.de;
+	listen 80;
+	listen [::]:80;
+
+	location ^~ /.well-known/acme-challenge {
+		proxy_pass http://127.0.0.1:83;
+		proxy_set_header Host $host;
+	}
+	
+	location / {
+		return 301 https://$host$request_uri;
+	}
+}
+
+
+server {
+	server_name wldap.hartlab.de;
+	listen 443 ssl http2;
+	listen [::]:443 ssl;
+
+	location = /robots.txt {
+		allow all;
+		log_not_found off;
+		access_log off;
+	}
+	
+	client_max_body_size 10240M;
+	
+	root /var/www/ldapadmin/;
+	index index.php index.html index.htm;
+
+    # default php handler
+    location ~ \.php$ {
+            fastcgi_pass unix:/run/php/php7.3-fpm.sock;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME  $document_root/$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_param HTTPS on;
+    }
+
+}
+```
+
+Es erfolgt ein rewrite aller Anfragen auf HTTPS. Mit der Ausnahme, dass die für Let's Encrypt benötigten Anfragen, weiterhin nur von HTTP bearbeitet werden. Alle PHP Dateien werden mit Hilfe von PHP-FPM ausgeführt.
+
+Nach diesen Einstellungen muss der NGINX Server mit `sudo systemctl restart nginx` neugestartet werden.
 
 ## LDAP Server
 
