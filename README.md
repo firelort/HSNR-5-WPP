@@ -54,7 +54,34 @@ Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden
 Für IPv4 und IPv6 wurde für beide Server ein rDNS gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die Domain Einstellungen übernommen. So müssen wir uns die IP Adressen für SSH 
 und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sEncrypt erhältlich. 
 
-## Cloud Server - NextCloud & phpldap
+## Cloud Server - NextCloud & phpldapadmin
+
+### phpldapadmin
+
+Für das Webinterface wurde eine weiter subdomain (wldap.hartlab.de) auf die IPs des Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
+
+#### Installation von phpldapadmin
+
+Das Repository im Ubuntu/Debian Packetmanager kann nicht genutzt werden, da dieses noch aus dem Jahr 2013 stammt und Probleme mit PHP 7.* hat.
+
+Um die aktuellste Version (von 2019) zu nutzen, kopiert man sich das git Verzeichnis mit `sudo git clone https://github.com/leenooks/phpLDAPadmin.git`.
+Im folgenden wird das Verzeichnis mit `sudo mv phpLDAPadmin /var/www/ldapadmin` verschoben. So liegen NextCloud und phpLDAPadmin an der selben Stelle und ein suchen der Anwendung ist nicht nötig.
+
+Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
+1. `cd /var/www/ldapadmin/config`  - Wechselt ins Verzeichnis und erleichetert die nächsten Schritte
+2. `sudo cp config.php.exaple config.php` - Kopiert die Konfigurationsvorlage, die alte wird nicht gelöscht, falls diese nochmal benötigt wird
+3. `nano config.php` - Konfiguration anpassen
+	* `$config->custom->appearance['language'] = 'english';` - Setzt die Sprache auf Englisch
+	* `$config->custom->appearance['timezone'] = 'Europe/Berlin';` - Setzt die Zeitzone der Anwendung auf Berlin, sodass diese mit der Uhrzeit von php und dem host-System übereinstimmt
+	* `$config->custom->appearance['hide_template_warning'] = true;` - Schaltet Fehlermeldung von phpLDAPadmin Tempaltes aus, da diese keine relevanz haben
+	* `$servers->setValue('server','name','Hartlab LDAP Server');` - Stellt den Namen ein, welcher im Webinterface gezeigtg wird
+	* `$servers->setValue('server','host','ldap.hartlab.de');` - Setzt den Host auf den das Interface zugreifen soll
+	* `$servers->setValue('server','base',array('dc=hartlab,dc=de'));` - Setzt die BASE DN
+	* `$servers->setValue('login','bind_id','');` - Leer lassen und auskommentieren, da sonst im Interface der Nutzername vorausgefüllt ist.
+	* `$servers->setValue('login','bind_pass','')` - Leer lassen und auskommentieren, da keine Funktionalität gewonnen wird und nur das Passwort im Klartext in einer Datei steht.
+	* `$servers->setValue('server','tls',true);` - TLS aktivieren, damit Interface und LDAP Server verschlüsselt kommunizieren könne. Der LDAP Server lehnt alle nicht TLS Verbindungen ab
+
+Im folgenden muss eine NGINX Konfig angelegt werden, damit die Subdomain wldap.hartlab.de auf die phpLDAPadmin Anwendung zeigt.
 
 ## LDAP Server
 
