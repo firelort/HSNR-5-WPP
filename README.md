@@ -137,12 +137,15 @@ Nach diesen Einstellungen muss der NGINX Server mit `sudo systemctl restart ngin
 
 ## LDAP Server
 
+### ufw Firewall
+
 Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen, um die Angriffsvektoren zu minimieren. Damit ein SSH Zugriff weiter möglich ist wurde eine Regel für OpenSSH erstellt.
 1. `sudo ufw default deny incoming` - Aller eingehender Traffic wird geblockt.
 2. `sudo ufw allow OpenSSH` - Setzt die Regeln für IPv4 und IPv6
 3. `sudo ufw enable` - Schaltet die Firewall aktiv
 
-Installation von LDAP / OpenLDAP
+### Installation von LDAP / OpenLDAP
+
 1. `sudo apt update` - Packet Index aktuallisieren
 2. `sudo apt install slapd ldap-utils` - Installation von LDAP
 3. `sudo dpkg-reconfigure slapd` - Rekonfiguration von slapd Packet
@@ -159,7 +162,7 @@ Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit diese
 2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4
 3. `sudo ufw status` - Firewall Einstellungen prüfen
 
-##### Zertifikat von Let's Encrypt
+### Zertifikat von Let's Encrypt
 
 Das Let's Encrypt Zertifikat wird genutzt um die Verbindungen zum LDAP Server zu verschlüsseln.
 
@@ -190,7 +193,7 @@ Gruppe die Datei lesen kann
 kann
 5. `sudo systemctl restart slapd` - slapd neustarten, damit die Zertifikate geladen werden
 
-##### slapd mit Zertifikat konfigurieren 
+### slapd mit Zertifikat konfigurieren 
 
 Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
 nutzt
