@@ -465,6 +465,8 @@ cp /etc/sysctl.conf /etc/sysctl.conf.bak
 sed -i '$avm.overcommit_memory = 1' /etc/sysctl.conf
 ```
 
+Nun muss der Server einmal mit `reboot now` neugestartet werden.
+
    
 ### phpldapadmin
 
