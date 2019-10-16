@@ -79,6 +79,129 @@ und Weboberfläche nicht mehr notwendig. Des Weiteren ist nur mit einem Domainna
 
 ## Cloud Server - NextCloud & phpldapadmin
 
+### Nextcloud 
+
+Für Nextcloud wurde eine Subdomain (cloud.hardlab.de) auf die IP des Servers (Cloud Server im Folgenden) angelegt. Dies dient der einfachereren Handhabung der Installation, für die Anwendung durch Benutzer und Zertifikate.
+
+#### Vorbereitung des Cloud Servers  
+
+Zunächst muss der Cloud Server für künfitge Schritte vorbereitet werden, dazu wurde in die root-Shell gewechselt und diverse "Standard"-Pakete installiert.
+Diese sind **normalerweise** auf den meisten Ubuntu-Distributionen installiert, dennoch wurden diese zur Verringerung von Fehlerursachen installiert/geupdated.
+
+```
+sudo -s
+apt install curl gnupg2 git lsb-release ssl-cert ca-certificates apt-transport-https tree locate software-properties-common dirmngr screen htop net-tools zip unzip curl ffmpeg ghostscript libfile-fcntllock-perl -y
+```
+
+Da im späteren Verlauf weitere, spezifische Pakete gebraucht werden, müssen wir zusätzliche Software-Respositories zu unseren vorhandenen hinzufügen.
+Diese sind speziell für Nginx, PHP 7.x und MariaDB.  
+  
+```
+cd /etc/apt/sources.list.d
+echo "deb [arch=amd64] http://nginx.org/packages/mainline/ubuntu $(lsb_release -cs) nginx" | tee nginx.list
+echo "deb [arch=amd64] http://ppa.launchpad.net/ondrej/php/ubuntu $(lsb_release -cs) main" | tee php.list
+echo "deb [arch=amd64] http://ftp.hosteurope.de/mirror/mariadb.org/repo/10.4/ubuntu $(lsb_release -cs) main" | tee mariadb.list
+```
+
+Nun müssen noch die erforderlichen Keys geladen werden um den neuen Quellen zu vertrauen. (In der Reihenfolge: Nginx, PHP and MariaDB).
+
+```
+curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
+apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 4F4EA0AAE5267A6C
+apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
+```
+
+Nun updaten wir noch einmal den Server und generieren selbst-signierte Zertifikate. Letztere werden später nicht mehr gebraucht.
+
+```
+apt update && apt upgrade -y
+make-ssl-cert generate-default-snakeoil -y
+```
+
+Zum Abschluss der Vorbereitung werden alte Instanzen, falls vorhanden, von Nginx entfernt.
+
+```
+apt remove nginx nginx-extras nginx-common nginx-full -y --allow-change-held-packages
+```
+
+#### Installation und Konfigurierung von Nginx
+
+Als Webserver benutzen wir für diese Serverkonfiguration Nginx. Dieser wird im späteren Verlauf auch zur Installation von phpLDAPadmin genutzt.  
+  
+
+
+Zuerst gehen wir sicher, dass keine Instanz von Apache läuft und installieren dann Nginx. Ersteres machen wir um sicherzugehen, dass keine Anwendung auf Port 80 läuft. 
+
+```
+systemctl stop apache2.service && systemctl disable apache2.service
+apt install nginx -y
+systemctl enable nginx.service
+```
+
+Nun werden die default-Einstellungen von Nginx für unsere Bedürfnisse angepasst. Vor den Änderungen wird ein Backup der Datei erstellt...  
+
+```
+mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak && touch /etc/nginx/nginx.conf
+nano /etc/nginx/nginx.conf
+```
+
+... und folgende Einstellungen übernommen:
+
+```
+user www-data;
+worker_processes auto;
+pid /var/run/nginx.pid;
+events {
+    worker_connections 1024;
+    multi_accept on; use epoll;
+}
+http {
+    server_names_hash_bucket_size 64;
+    upstream php-handler {
+        server unix:/run/php/php7.3-fpm.sock;
+    }
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log warn;
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from 94.16.123.148; # Server-IP
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+    include /etc/nginx/mime.types;
+    #include /etc/nginx/proxy.conf;
+    #include /etc/nginx/ssl.conf;
+    #include /etc/nginx/header.conf;
+    #include /etc/nginx/optimization.conf; 
+    default_type application/octet-stream;
+    sendfile on;
+    send_timeout 3600;
+    tcp_nopush on;
+    tcp_nodelay on;
+    open_file_cache max=500 inactive=10m;
+    open_file_cache_errors on;
+    keepalive_timeout 65;
+    reset_timedout_connection on;
+    server_tokens off;
+    resolver 94.16.123.148 valid=30s;
+    resolver_timeout 5s;
+    include /etc/nginx/conf.d/*.conf;
+}
+```
+
+**Anmerkung:** Im http-Block sind die 4 includes (proxy.conf, ssl.conf, header.conf und optimization.conf) noch auskommentiert, diese werden erst später eingerichtet und eingesetzt.  
+  
+Nun testen und starten wir den Server um sicherzugehen, dass bei den Einstellungen nichts schief gelaufen ist.
+    
+```
+nginx -t && service nginx restart
+```    
+
+Zuletzt erstellen wir noch die benötigten Ordner für Nextcloud (nc_data) und Let's Encrypt (letsencrypt) und weisen diese der Gruppe www-data zu um Nginx Zugriff zu gewähren.
+
+```
+mkdir -p /var/nc_data /var/www/letsencrypt
+chown -R www-data:www-data /var/nc_data /var/www
+```
+
 ### phpldapadmin
 
 Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
@@ -96,7 +219,7 @@ Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
 3. `nano config.php` - Konfiguration anpassen
 	* `$config->custom->appearance['language'] = 'english';` - Setzt die Sprache auf Englisch
 	* `$config->custom->appearance['timezone'] = 'Europe/Berlin';` - Setzt die Zeitzone der Anwendung auf Berlin, sodass diese mit der Uhrzeit von php und dem host-System übereinstimmt
-	* `$config->custom->appearance['hide_template_warning'] = true;` - Schaltet Fehlermeldung von phpLDAPadmin Tempaltes aus, da diese keine relevanz haben
+	* `$config->custom->appearance['hide_template_warning'] = true;` - Schaltet Fehlermeldung von phpLDAPadmin Tempaltes aus, da diese keine Relevanz haben
 	* `$servers->setValue('server','name','Hartlab LDAP Server');` - Stellt den Namen ein, welcher im Webinterface gezeigtg wird
 	* `$servers->setValue('server','host','ldap.hartlab.de');` - Setzt den Host auf den das Interface zugreifen soll
 	* `$servers->setValue('server','base',array('dc=hartlab,dc=de'));` - Setzt die BASE DN
