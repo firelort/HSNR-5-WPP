@@ -2,7 +2,6 @@
 
 von Robert Hartings und Alexander Niersmann
 
-
 # Server
 
 Es werden zwei Server von NetCup bezogen. 
@@ -206,6 +205,25 @@ chown -R www-data:www-data /var/nc_data /var/www
 
 Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
 
+#### Vorraussetzungen für phpLDAPadmin
+
+Zuerst müssen folgende PHP Module installiert werden, sofern diese noch nicht auf dem System vorhanden sind
+1. `sudo apt install php7.3-ldap`
+2. `sudo apt install php7.3-readline`
+3. `sudo apt install php7.3-xml`
+
+Desweiteren wird wegen der Zertifikate und der TLS Verschlüssel die folgenden Pakete installiert.
+* `sudo apt install gnutls-bin ssl-cert`
+
+Danach wird das Zertifikat der Zertifizierungsstelle (sihe LDAP Server - Übertragung des Zertifikates an den Cloud Servers) fertig einsatzbereit gemacht.
+1. `sudo chown root:root cacert.pem` - Das Zertifikat soll root und nicht dem User gehören
+2. `sudo mv cacert.pem /etc/ssl/certs` - Danach wird das Zertifikat in den Standard Linux Ordner verschoben.
+
+Jetzt muss nur noch die `ldap.conf` angepasst werden.
+1. `sudo nano /etc/ldap/ldap.conf` - LDAP Konfiguration anpassen
+2. `TLS_CACERT /etc/ssl/certs/cacert.pem` -Pfad des Zertifikates angeben, damit LDAP weiß auf welches Zertifikat zugegriffen werden soll
+3. `TLS_REQCERT demand` - Es soll nur eine Verbindung mit gültigem Zertifikat möglich sein, der Rest soll abgebrochen werden.
+
 #### Installation von phpLDAPadmin
 
 Das Repository im Ubuntu/Debian Paketmanager kann nicht genutzt werden, da dieses noch aus dem Jahr 2013 stammt und Probleme mit PHP 7.* hat.
@@ -310,60 +328,83 @@ Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit diese
 2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4 (IPv4 Adresse des Cloud Servers)
 3. `sudo ufw status` - Firewall Einstellungen prüfen
 
-### Zertifikat von Let's Encrypt
+### Zertifikat für TLS
 
-Ein Let's Encrypt Zertifikat wird genutzt, um die Verbindungen zum LDAP Server zu verschlüsseln.
+Ein selbstsigniertes Zertifikat wird genutzt, um die Verbindungen zum LDAP Server zu verschlüsseln.
 
-Das Zertifikat wird von Let's Encrypt bezogen, da es dort kostenfrei ist, jedoch ist es hier nur für 90 Tage 
-gültig und muss im besten Fall 30 Tage vorher neu bezogen werden.
+Dazu müssen die Pakete `gnutls-bin` und `ssl-cert` installiert werden.
+* `sudo apt install gnutls-bin ssl-cert`
 
-Für die Generierung / Erstellung des Zertifikats wird der von Let's Encrypt empfohlene CertBot genutzt.
-1. `sudo ufw allow 80` - Port 80 in der Firewall freigegeben, damit Let's Encrypt mit diesem Server kommunizieren kann.
-2. `sudo apt update`
-3. `sudo apt install certbot` - Certbot installieren
-4. `sudo certbot certonly --standalone` - Nur Zertifikat beziehen und keine Konfiguration vornehmen
-5. `sudo ls  /etc/letsencrypt/live` - Prüfen ob Zertifikat vorhanden ist
-6. `sudo ufw delete allow 80` - Port 80 in der Firewall wieder auf default setzen, in diesem Fall auf deny
+Als nächstest wird der private key für die Zertifizierungsstelle erstellet.
+* `sh -c "certtool --generate-privkey > /etc/ssl/private/cakey.pem"`
+    1. `--generate-privkey` - Certtool erstellt einen privaten Schlüssel
 
-Zertifikate in Standard SSL Verzeichnis von Linux kopieren, damit der slapd Deamon Zugang erhält.
-1. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/cert.pem /etc/ssl/certs/ldap.hartlab.de.cert.pem`
-2. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/fullchain.pem /etc/ssl/certs/ldap.hartlab.de.fullchain.pem`
-3. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/privkey.pem /etc/ssl/private/ldap.hartlab.de.privkey.pem`
+Danach wird ein Vorlage erstellt, um die Zertifizierungsstelle zu definieren. Dieses wird mit `sudo nano /etc/ssl/ca.info` gemacht und mit dem Inhalt befüllt:
+```
+cn = hartlab
+ca
+cert_signing_key
+```
 
-Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält, da die Let's Encrypt Zertifikate nur von Root 
-gelesen werden können.
-1. `sudo apt install ssl-cert` - Nur notwendig, wenn es sich um ein minimale Installation von Linux handelt, da sonst die 
-ssl-cert Gruppe nicht gibt
-2. `sudo chown :ssl-cert /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Gruppe ssl-cert der Datei hinzufügen
-3. `sudo chmopd 640 /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
+Nach dem diese Vorbereitungen abgeschlossen sind, kann nun ein selbstsigniertes Zertifikat erstellt werden.
+* `certtool --generate-self-signed --load-privkey /etc/ssl/private/cakey.pem --template /etc/ssl/ca.info --outfile /etc/ssl/certs/cacert.pem`
+    1. `--generate-self-signed` - Generiere eine selbstsigniertes Zertifikat
+    2. `--load-privkey` - Gibt den privaten Key an, welcher genutzt werden soll
+    3. `--template` - Definiert das Template
+    4. `--outfile` - Gibt den Ausgabeort an
+
+Erstelle einen privaten Schlüssel für den Server
+* `certtool --generate-privkey --bits 2048 --outfile /etc/ssl/private/ldap_slapd_key.pem`
+    1. `--generate-privkey` - Certtool erstellt einen privaten Schlüssel
+    2. `--bits` - Gibt die Numer an bits für die Schlüsselerstellung an
+    3. `--outfile` - Gibt den Ausgabeort an
+
+Danach wird ein weiters Template für das Server Zertifikat erstellt. Dazu wird die Datei `/etc/ssl/ldap.info` angelegt und folgender Inhalt wird eingefügt.
+```
+organization = hartlab
+cn = ldap.hartlab.de
+tls_www_server
+encryption_key
+signing_key
+expiration_days = 3650
+```
+
+Die angelegte Vorlage wird genutzt um das Server Zertifikat zu erstellen
+* `certtool --generate-certificate --load-privkey /etc/ssl/private/ldap_slapd_key.pem --load-ca-certificate /etc/ssl/certs/cacert.pem --load-ca-privkey /etc/ssl/private/cakey.pem --template /etc/ssl/ldap.info --outfile /etc/ssl/certs/ldap_slapd_cert.pem`
+
+Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält.
+2. `sudo chown :ssl-cert /etc/ssl/private/ldap_slapd_key.pem` - Gruppe ssl-cert der Datei hinzufügen
+3. `sudo chmopd 640 /etc/ssl/private/ldap_slapd_key.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
 Gruppe die Datei lesen kann
 4. `sudo usermod -aG ssl-cert openldap` - Nutzer openldap der Gruppe ssl-cert hinzufügen, damit das Zertifikat gelesen werden 
 kann
-5. `sudo systemctl restart slapd` - slapd Neustarten, damit die Zertifikate geladen werden
+5. `sudo systemctl restart slapd` - slapd Neustarten, damit die Zertifikate geladen werden können
 
 ### slapd mit Zertifikat konfigurieren 
 
 Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
 nutzt
-1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:
+1. Erstellen der Datei `cd ~` und `nano certinfo.ldif` mit dem Inhalt:
 ```
 dn: cn=config
 changetype: modify
 add: olcTLSCACertificateFile
-olcTLSCACertificateFile: /etc/ssl/certs/ldap.hartlab.de.fullchain.pem
+olcTLSCACertificateFile: /etc/ssl/certs/cacert.pem
 -
 add: olcTLSCertificateFile
-olcTLSCertificateFile: /etc/ssl/certs/ldap.hartlab.de.cert.pem
+olcTLSCertificateFile: /etc/ssl/certs/ldap_slapd_cert.pem
 -
 add: olcTLSCertificateKeyFile
-olcTLSCertificateKeyFile: /etc/ssl/private/ldap.hartlab.de.privkey.pem
+olcTLSCertificateKeyFile: /etc/ssl/private/ldap_slapd_key.pem
 
 ```
 2. Datei speichern und schließen
-3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ssl.ldif` anwenden, ein reload des slapd Deamons ist nicht 
+3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f certinfo.ldif` anwenden, ein reload des slapd Deamons ist nicht 
 notwendig, da ldapmodify dieses sleber macht
 4. Mit `ldapwhoami -H ldap://ldap.hartlab.de -x -ZZ` die Konfiguration prüfen, der Hostname ist notwendig, da das Zertifikat 
 abgeprüft wird.
+
+### STARTTLS erzwingen
 
 STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
 1. Änderung der Hosts Datei, damit der FQDN richtig gesetzt ist mit `sudo nano /etc/hosts`
@@ -374,15 +415,28 @@ STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
 dn: olcDatabase={1}mdb,cn=config
 olcSuffix: dc=hartlab,dc=de
 ```
-5. Erstellen einer LDIF Datei um Änderungen vorzubereiten `nano ~/tls.ldif` und dem Inhalt:
+5. Erstellen einer LDIF Datei um Änderungen vorzubereiten `nano ~/enforceTLS.ldif` und dem Inhalt:
 ```
 dn: olcDatabase={1}mdb,cn=config
 changetype: modify
 add: olcSecurity
 olcSecurity: tls=1
 ```
-6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f tls.ldif`
+6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f enforceTLS.ldif`
 7. Prüfen, ob nur noch eine Verbindung mit SSL möglich ist
 	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL dn`, sollte mit der Fehlermeldung `TLS confidentiality 
 required` scheitern
 	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL -Z dn`, sollte ohne Fehlermeldung funktionieren
+
+### Änderungen an LDAP Konfig
+
+Bearbeiten der `ldap.conf`, damit das vorher erstellte Zertifikat genutzt wird.
+* `sudo nano /etc/ldap/ldap.conf`
+    1. Eintrag `TLS_CACERT /etc/ssl/certs/cacert.pem` anlegen.
+
+Anschließend wird der LDAP Deamon mit `sudo systemctl restart slapd` neugestart.
+
+### Übertragung des Zertifikates an den Cloud Servers
+
+Damit der Cloud Server dem Zertifikat der Zertifizierungsstelle traut, wird dieses auf den Cloud Server kopiert.
+* `sudo scp /etc/ssl/certs/cacert.pem USERNAME@cloud.hartlab.de:~USERNAME/`
