@@ -202,6 +202,98 @@ mkdir -p /var/nc_data /var/www/letsencrypt
 chown -R www-data:www-data /var/nc_data /var/www
 ```
 
+#### Installation und Konfigurierung von PHP 7.3 (fpm)
+
+Für Nextcloud sowie phpLDAPadmin brauchen wir PHP, wir nutzen PHP 7.3-fpm (FastCGI-Prozessmanager) um die (zum Zeitpunkt der Erstellung des Servers/der Dokumentation) neuste PHP zu nutzen und die Prozesse durch fpm zu beschleunigen.  
+
+Zur Installation für PHP und der benötigen Module für unsere Zwecke nutzen wir folgenden Befehl:
+
+```
+apt update && apt install php7.3-fpm php7.3-gd php7.3-mysql php7.3-curl php7.3-xml php7.3-zip php7.3-intl php7.3-mbstring php7.3-json php7.3-bz2 php7.3-ldap php-apcu imagemagick php-imagick php-smbclient -y
+```
+
+**Anmerkung:** Diese Pakete stammen unter anderem aus dem Repository welches wir bei der Einrichtung des Servers hinzugefügt haben. 
+
+Nun schauen wir ob die Zeitzone, die genutzt wird die ist, die wir brauchen. 
+```
+date
+```
+
+Zum setzen der Zeitzone kann dieser Befehl genutzt werden: 
+ ```
+timedatectl set-timezone Europe/Berlin
+```
+
+Als nächsten ändern wir ein paar Einstellungen aus in diversen PHP-Konfigurations-Dateien, diese werden vorher gebackuped.
+
+```
+cp /etc/php/7.3/fpm/pool.d/www.conf /etc/php/7.3/fpm/pool.d/www.conf.bak
+cp /etc/php/7.3/cli/php.ini /etc/php/7.3/cli/php.ini.bak
+cp /etc/php/7.3/fpm/php.ini /etc/php/7.3/fpm/php.ini.bak
+cp /etc/php/7.3/fpm/php-fpm.conf /etc/php/7.3/fpm/php-fpm.conf.bak
+cp /etc/ImageMagick-6/policy.xml /etc/ImageMagick-6/policy.xml.bak
+```
+
+**Anmerkung:** Die folgenden Befehle ändern nur Werte in den Konfigurations-Dateien, diese Änderungen können auch mit einem beliebigen Editor vorgenommen werden. Die Terminaleingaben ersparen in diesem Fall das manuelle Suchen.  
+
+
+Zuerst beginnen wir mit `/etc/php/7.3/fpm/pool.d/www.conf`, dort werden ein paar Pfade, die auskommentiert sind, wieder aktiviert.
+
+```
+sed -i "s/;env\[HOSTNAME\] = /env[HOSTNAME] = /" /etc/php/7.3/fpm/pool.d/www.conf
+sed -i "s/;env\[TMP\] = /env[TMP] = /" /etc/php/7.3/fpm/pool.d/www.conf
+sed -i "s/;env\[TMPDIR\] = /env[TMPDIR] = /" /etc/php/7.3/fpm/pool.d/www.conf
+sed -i "s/;env\[TEMP\] = /env[TEMP] = /" /etc/php/7.3/fpm/pool.d/www.conf
+sed -i "s/;env\[PATH\] = /env[PATH] = /" /etc/php/7.3/fpm/pool.d/www.conf
+```
+
+Als nächstes ändern wir `/etc/php/7.3/cli/php.ini`, hier werden ein paar Größen wie maximale Dateigröße bei Uploads und maximale Ausführungszeit geändert, da wir auch beabsichtien den Cloud für größere Datein zu nutzen.
+
+```
+sed -i "s/output_buffering =.*/output_buffering = 'Off'/" /etc/php/7.3/cli/php.ini
+sed -i "s/max_execution_time =.*/max_execution_time = 3600/" /etc/php/7.3/cli/php.ini
+sed -i "s/max_input_time =.*/max_input_time = 3600/" /etc/php/7.3/cli/php.ini
+sed -i "s/post_max_size =.*/post_max_size = 10240M/" /etc/php/7.3/cli/php.ini
+sed -i "s/upload_max_filesize =.*/upload_max_filesize = 10240M/" /etc/php/7.3/cli/php.ini
+sed -i "s/;date.timezone.*/date.timezone = Europe\/\Berlin/" /etc/php/7.3/cli/php.ini
+```
+
+Diese und weitere Einstellungen werden auch in die Datei `/etc/php/7.3/fpm/php.ini` übernommen. Hier stellen wir zusätzliche Optionen für den fpm ein zur Verbesserung für die Performance.
+``` 
+sed -i "s/memory_limit = 128M/memory_limit = 512M/" /etc/php/7.3/fpm/php.ini
+sed -i "s/output_buffering =.*/output_buffering = 'Off'/" /etc/php/7.3/fpm/php.ini
+sed -i "s/max_execution_time =.*/max_execution_time = 3600/" /etc/php/7.3/fpm/php.ini
+sed -i "s/max_input_time =.*/max_input_time = 3600/" /etc/php/7.3/fpm/php.ini
+sed -i "s/post_max_size =.*/post_max_size = 10240M/" /etc/php/7.3/fpm/php.ini
+sed -i "s/upload_max_filesize =.*/upload_max_filesize = 10240M/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;date.timezone.*/date.timezone = Europe\/\Berlin/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;session.cookie_secure.*/session.cookie_secure = True/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.enable=.*/opcache.enable=1/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.enable_cli=.*/opcache.enable_cli=1/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.memory_consumption=.*/opcache.memory_consumption=128/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.interned_strings_buffer=.*/opcache.interned_strings_buffer=8/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.max_accelerated_files=.*/opcache.max_accelerated_files=10000/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.revalidate_freq=.*/opcache.revalidate_freq=1/" /etc/php/7.3/fpm/php.ini
+sed -i "s/;opcache.save_comments=.*/opcache.save_comments=1/" /etc/php/7.3/fpm/php.ini
+```
+
+Und letztendlich ändern wir noch die Rechte für PS, EPI, PDF und XPS Dateien in der `/etc/ImageMagick-6/policy.xml`. Das erlaubt und das Verarbeiten dieser Dateien durch PHP.
+
+```
+sed -i "s/rights=\"none\" pattern=\"PS\"/rights=\"read|write\" pattern=\"PS\"/" /etc/ImageMagick-6/policy.xml
+sed -i "s/rights=\"none\" pattern=\"EPI\"/rights=\"read|write\" pattern=\"EPI\"/" /etc/ImageMagick-6/policy.xml
+sed -i "s/rights=\"none\" pattern=\"PDF\"/rights=\"read|write\" pattern=\"PDF\"/" /etc/ImageMagick-6/policy.xml
+sed -i "s/rights=\"none\" pattern=\"XPS\"/rights=\"read|write\" pattern=\"XPS\"/" /etc/ImageMagick-6/policy.xml
+```
+
+Nun starten wir PHP und Nginx neu um die Einstellungen zu übernehmen.
+
+```
+service php7.3-fpm restart
+service nginx restart
+```
+
+
 ### phpldapadmin
 
 Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
@@ -345,7 +437,7 @@ kann
 
 Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
 nutzt
-1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:
+1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:  
 ```
 dn: cn=config
 changetype: modify
@@ -357,7 +449,6 @@ olcTLSCertificateFile: /etc/ssl/certs/ldap.hartlab.de.cert.pem
 -
 add: olcTLSCertificateKeyFile
 olcTLSCertificateKeyFile: /etc/ssl/private/ldap.hartlab.de.privkey.pem
-
 ```
 2. Datei speichern und schließen
 3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ssl.ldif` anwenden, ein reload des slapd Deamons ist nicht 
