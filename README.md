@@ -293,7 +293,179 @@ service php7.3-fpm restart
 service nginx restart
 ```
 
+#### Installation und Konfiguration von MariaDB
 
+Als Datenbanksoftware haben wir MariaDB gewählt, da diese neben MySQL von Nextcloud empfohlen wird. 
+
+Zuerst müssen wir die MariaDB-Pakete runterladen und installieren.
+
+```
+apt update && apt install mariadb-server -y
+```
+
+Um zu sehen ob dies erfolgreich war kann man die mysql-Version prüfen.
+```
+mysql --version
+```
+
+Das sollte eine ähnliche Ausgabe wie die Folgende erzeugen: 
+```
+mysql  Ver 15.1 Distrib 10.4.8-MariaDB, for debian-linux-gnu (x86_64) using readline 5.2
+```
+
+Als nächstes muss die Datenbank gesichert werden, der Prozess wird mit folgendem Befehl gestartet:
+``` 
+mysql_secure_installation
+```
+
+Nun werden diverse Abfragen durchgeführt, dieser werden wie angegeben beantwortet und Testzugänge/-daten zu entfernen, ein root-Passwort feszulegen und einen entfernen Zugriff auf das root-Konto zu unterbinden.
+
+```
+Switch to unix_socket authentication [Y/n] N
+Enter current password for root (enter for none): <ENTER>
+Set root password? [Y/n] Y
+Remove anonymous users? [Y/n] Y
+Disallow root login remotely? [Y/n] Y
+Remove test database and access to it? [Y/n] Y
+Reload privilege tables now? [Y/n] Y
+```
+
+Als nächstes müssen wir die Konfigurationsdatei ändern, dazu stoppen wir mysql, erstellen wieder ein Backup und öffnen diese in einem Editor.
+
+```
+service mysql stop
+mv /etc/mysql/my.cnf /etc/mysql/my.cnf.bak
+nano /etc/mysql/my.cnf
+```
+
+Diese Einstellungen werden wir für die Installation von Nextcloud verwenden: 
+``` 
+[client]
+ default-character-set = utf8mb4
+ port = 3306
+ socket = /var/run/mysqld/mysqld.sock
+[mysqld_safe]
+ log_error=/var/log/mysql/mysql_error.log
+ nice = 0
+ socket = /var/run/mysqld/mysqld.sock
+[mysqld]
+ basedir = /usr
+ bind-address = 127.0.0.1
+ binlog_format = ROW
+ bulk_insert_buffer_size = 16M
+ character-set-server = utf8mb4
+ collation-server = utf8mb4_general_ci
+ concurrent_insert = 2
+ connect_timeout = 5
+ datadir = /var/lib/mysql
+ default_storage_engine = InnoDB
+ expire_logs_days = 10
+ general_log_file = /var/log/mysql/mysql.log
+ general_log = 0
+ innodb_buffer_pool_size = 1024M
+ innodb_buffer_pool_instances = 1
+ innodb_flush_log_at_trx_commit = 2
+ innodb_log_buffer_size = 32M
+ innodb_max_dirty_pages_pct = 90
+ innodb_file_per_table = 1
+ innodb_open_files = 400
+ innodb_io_capacity = 4000
+ innodb_flush_method = O_DIRECT
+ key_buffer_size = 128M
+ lc_messages_dir = /usr/share/mysql
+ lc_messages = en_US
+ log_bin = /var/log/mysql/mariadb-bin
+ log_bin_index = /var/log/mysql/mariadb-bin.index
+ log_error=/var/log/mysql/mysql_error.log
+ log_slow_verbosity = query_plan
+ log_warnings = 2
+ long_query_time = 1
+ max_allowed_packet = 16M
+ max_binlog_size = 100M
+ max_connections = 200
+ max_heap_table_size = 64M
+ myisam_recover_options = BACKUP
+ myisam_sort_buffer_size = 512M
+ port = 3306
+ pid-file = /var/run/mysqld/mysqld.pid
+ query_cache_limit = 2M
+ query_cache_size = 64M
+ query_cache_type = 1
+ query_cache_min_res_unit = 2k
+ read_buffer_size = 2M
+ read_rnd_buffer_size = 1M
+ skip-external-locking
+ skip-name-resolve
+ slow_query_log_file = /var/log/mysql/mariadb-slow.log
+ slow-query-log = 1
+ socket = /var/run/mysqld/mysqld.sock
+ sort_buffer_size = 4M
+ table_open_cache = 400
+ thread_cache_size = 128
+ tmp_table_size = 64M
+ tmpdir = /tmp
+ transaction_isolation = READ-COMMITTED
+ user = mysql
+ wait_timeout = 600
+[mysqldump]
+ max_allowed_packet = 16M
+ quick
+ quote-names
+[isamchk]
+ key_buffer = 16M 
+```
+
+Wichtig in diesem Fall sind unter anderem `transaction_isolation = READ-COMMITTED` (normalerweise default-Einstellung für Transaktionen) und unser gewünschtes Encoding ` default-character-set = utf8mb4`
+
+Nun starten wir MariaDB neu und verbinden uns.
+
+``` 
+service mysql restart
+mysql -uroot -p
+```
+
+Nach Eingabe des Passworts erstellen wir die Datenbank, die Nextcloud benötigt.
+```
+CREATE DATABASE nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE USER nextcloud@localhost identified by '<Passwort>'; GRANT ALL PRIVILEGES on nextcloud.* to nextcloud@localhost; FLUSH privileges; quit;
+```
+
+`<Passwort>` muss in diesem Fall durch ein gültiges Passwort ersetzt werden.  
+
+Danach prüfen wir ob das Transaktionslevel und Kollation richtig gesetzt sind.
+``` 
+mysql -h localhost -uroot -p -e "SELECT @@TX_ISOLATION; SELECT SCHEMA_NAME 'database', default_character_set_name 'charset', DEFAULT_COLLATION_NAME 'collation' FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='nextcloud'"
+```
+
+Die gewünschten Ergebnisse sind `READ-COMMITTED` und `utf8mb4_general_ci`.
+
+#### Installation und Konfiguration von Redis
+
+Wir nutzen Redis um die Performance von Nextcloud zu verbessern und die Belastung der Datenbank zu minimieren. Diese Schritt ist rein optional.
+
+Zum Beginn muss Redis installiert werden.
+
+```
+apt update
+apt install redis-server php-redis -y
+```
+
+Als nächstes passen wir die Konfiguration an und erteilen Redis die benötigten Gruppenrechte. Hier wird ebenfalls ein Backup der Konfigurations-Datei erstellt.
+```
+cp /etc/redis/redis.conf /etc/redis/redis.conf.bak
+sed -i "s/port 6379/port 0/" /etc/redis/redis.conf
+sed -i s/\#\ unixsocket/\unixsocket/g /etc/redis/redis.conf
+sed -i "s/unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
+sed -i "s/# maxclients 10000/maxclients 512/" /etc/redis/redis.conf
+usermod -aG redis www-data
+```
+
+Zum Schluss setzen wir `overcommit_memory ` auf 1 um bei einem fork nicht den kompletten Datenbestand zu kopieren. 
+```
+cp /etc/sysctl.conf /etc/sysctl.conf.bak
+sed -i '$avm.overcommit_memory = 1' /etc/sysctl.conf
+```
+
+   
 ### phpldapadmin
 
 Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
