@@ -5,9 +5,13 @@ von Robert Hartings und Alexander Niersmann
 
 # Server
 
-Server werden von NetCup bezogen. Ein Server wird für LDAP, der andere Server wird für NextCloud und phpldap genutzt. Diese machen wir, damit LDAP und die anderen Systeme nicht auf einer Maschiene laufen um so eine wirkliche LDAP Nutzung zu simulieren.
+Es werden zwei Server von NetCup bezogen. 
+
+Ein Server wird nur für LDAP genutzt. Auf dem anderen Server läuft ein NGINX Webserver, sodass NextCloud und phpldap erreichbar sind. Diese machen wir, damit LDAP und die anderen Systeme nicht auf einer Maschiene laufen um so eine realisitische LDAP Nutzung zu simulieren.
 
 ## Serverhardware
+
+Beide Server sind mit folgender Hardware ausgerüstet.
 
 | Hardware | Value |
 |---|---|
@@ -18,7 +22,7 @@ Server werden von NetCup bezogen. Ein Server wird für LDAP, der andere Server w
 
 # Serverkonfiguration
 
-Neuste Updates wurden installiert:
+Neuste Updates auf den Servern installieren:
 
 1. `apt update`
 2. `apt upgrade -y`
@@ -30,14 +34,14 @@ Nutzer mit sudo Rechten anlegen, damit der Root Account nicht mehr genutzt werde
 1. `adduser USERNAME`
 2. `adduser USERNAME sudo`
 
-Die Nutzer erhalten ein sichers Passwort, ein SSH-Key wäre die sichere Varainte wird auf Grund der nicht vorhanden Kritikalität jedoch nicht verwendet. Es empfiehlt sich einen SSH-Key zu nutzen.
+Die Nutzer erhalten ein sichers Passwort, ein SSH-Key wäre die sichere Varainte wird auf Grund der nicht vorhanden Kritikalität nicht verwendet. Im Allgemeinen empfiehlt sich einen SSH-Key zu nutzen.
 
 Das Root Passwort wird geändert, damit ein mögliches mitlesen des E-Mail Verkehrs zwischen Hoster und Mieter nicht zu einer Kompromittierung des Servers führt.
 1. `passwd`
 
 Der Root Nutzer erhält ein sichers Passwort. Im folgenden werden nur noch die User Accounts mit sudo-Berechtigung genutzt.
 
-In der SSH-Config den Login von Root unterbinden, umso einen mögliches Brutforcen des Root Passworts zu verhindern:
+In der SSH-Config wird der Login von Root unterbinden, umso einen mögliches Brutforcen des Root Passworts zu verhindern:
 1. `sudo nano /etc/ssh/sshd_config`
 2. Zeile `PermitRootLogin` von `yes` auf `no` ändern, damit ein Login via SSH auf Root nicht mehr möglich ist.
 3. Falls alle Nutzer ssh-Keys hinterlegt haben, kann `PasswordAuthentication` von `yes` auf `no` gesetzt werden, da jedoch nur Passwort genutzt worden ist bleibt der Wert auf `yes`
@@ -51,14 +55,33 @@ Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden
 2. IPv4 und IPv6 Konfigurationen werden statisch an einen Adapter vergeben. DHCP wird nicht weiter genutzt.
 3. Änderungen werden mit `sudo netplan apply` angewendet.
 
-Für IPv4 und IPv6 wurde für beide Server ein rDNS gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die Domain Einstellungen übernommen. So müssen wir uns die IP Adressen für SSH 
-und Weboberfläche nicht merken, desweitern ist so nur ein Zertifikat von Let'sEncrypt erhältlich. 
+Die aktuelle Konfiguration siehet wie folgt aus:
+
+```
+# This file describes the network interfaces available on your system
+# For more information, see netplan(5).
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      addresses: [94.16.123.148/22, "2a03:4000:21:848::1/64"]
+      gateway4: 94.16.120.1
+      gateway6: fe80::1
+      nameservers:
+        addresses: [46.38.225.230, 46.38.252.230, "2a03:4000:0:1::e1e6", "2a03:4000:8000::fce6"]
+```
+
+Die Adressen, Gateways und Nameserver sind von Netcup vorgegeben worden.
+
+Für IPv4 und IPv6 wurde bei beiden Servern ein rDNS Eintrag gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die DNS Einstellungen der Domain übernommen. So ist eine Nutzung der IP Adressen für SSH 
+und Weboberfläche nicht mehr notwendig. Des Weitern ist nur mit einem Domainnamen ein Zertifikat von Let's Encrypt beantragbar. 
 
 ## Cloud Server - NextCloud & phpldapadmin
 
 ### phpldapadmin
 
-Für das Webinterface wurde eine weiter subdomain (wldap.hartlab.de) auf die IPs des Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
+Für das Webinterface wurde eine weiter subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
 
 #### Installation von phpLDAPadmin
 
@@ -131,7 +154,7 @@ server {
 }
 ```
 
-Es erfolgt ein rewrite aller Anfragen auf HTTPS. Mit der Ausnahme, dass die für Let's Encrypt benötigten Anfragen, weiterhin nur von HTTP bearbeitet werden. Alle PHP Dateien werden mit Hilfe von PHP-FPM ausgeführt.
+Es erfolgt ein rewrite aller Anfragen auf HTTPS. Mit der Ausnahme, dass die für Let's Encrypt benötigten Anfragen, weiterhin nur über HTTP bearbeitet werden und in den richtigen Ordner weiterleiten. Alle PHP Dateien werden mit Hilfe von PHP-FPM ausgeführt.
 
 Nach diesen Einstellungen muss der NGINX Server mit `sudo systemctl restart nginx` neugestartet werden.
 
@@ -146,6 +169,8 @@ Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen
 
 ### Installation von LDAP / OpenLDAP
 
+Installation von slapd - Stand-alone LDAP Daemon.
+
 1. `sudo apt update` - Packet Index aktuallisieren
 2. `sudo apt install slapd ldap-utils` - Installation von LDAP
 3. `sudo dpkg-reconfigure slapd` - Rekonfiguration von slapd Packet
@@ -158,8 +183,8 @@ Als erstes wurde die ufw Firewall aktiviert um eingehende Verbindungen abzulehen
 4. Installation mit `ldapwhoami -H ldap:// -x` prüfen
 
 Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit dieser eine LDAP Anbindug einrichten und nutzen kann.
-1. `sudo ufw allow from 2a03:4000:21:848::1 to any port ldap` - LDAP über IPv6
-2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4
+1. `sudo ufw allow from 2a03:4000:21:848::1 to any port ldap` - LDAP über IPv6 (IPv6 Adresse des Cloud Servers)
+2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4 (IPv4 Adresse des Cloud Servers)
 3. `sudo ufw status` - Firewall Einstellungen prüfen
 
 ### Zertifikat von Let's Encrypt
@@ -220,8 +245,8 @@ abgeprüft wird.
 STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
 1. Änderung der Hosts Datei, damit der FQDN richtig gesetzt ist mit `sudo nano /etc/hosts`
 2. Die Zeile `127.0.1.1` finden und durch `127.0.1.1 ldap.hartlab.de ldap` erstezen, so ist der FQDN richtig gesetzt
-3. Herausfinden, welcher Eintrag verändert werden soll `sudo ldapsearch -H ldapi:// -Y EXTERNAL -b "cn=config" -LLL -Q "(olc$
-4. Ausgabe sollte wie folgt aussehen
+3. Herausfinden, welcher Eintrag verändert werden soll `sudo ldapsearch -H ldapi:// -Y EXTERNAL -b "cn=config" -LLL -Q "(olcSuffix=*)" dn olcSuffix`
+4. Ausgabe sollte folgendermaßen aussehen:
 ```
 dn: olcDatabase={1}mdb,cn=config
 olcSuffix: dc=hartlab,dc=de
