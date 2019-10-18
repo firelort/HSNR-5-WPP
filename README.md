@@ -2,7 +2,6 @@
 
 von Robert Hartings und Alexander Niersmann
 
-
 # Server
 
 Es werden zwei Server von NetCup bezogen. 
@@ -47,7 +46,7 @@ In der SSH-Config wird der Login von Root unterbinden, umso einen mögliches Bru
 3. Falls alle Nutzer ssh-Keys hinterlegt haben, kann `PasswordAuthentication` von `yes` auf `no` gesetzt werden, da jedoch nur Passwörter genutzt worden sind bleibt der Wert auf `yes`
 4. SSH (Deamon)  mit `sudo systemctl restart ssh` neustarten, damit die Änderungen übernommen werden.
 
-Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `cloud` und der LDAP Server den Hostname `ldap`.
+Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `wpp` und der LDAP Server den Hostname `ldap`.
 1. Hostname setzen durch `sudo hostnamectl set-hostname HOSTNAME`
 
 Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden. IPv6 wird vorausschauend aktiviert, es könnte gebraucht werden.
@@ -202,275 +201,26 @@ mkdir -p /var/nc_data /var/www/letsencrypt
 chown -R www-data:www-data /var/nc_data /var/www
 ```
 
-#### Installation und Konfigurierung von PHP 7.3 (fpm)
-
-Für Nextcloud sowie phpLDAPadmin brauchen wir PHP, wir nutzen PHP 7.3-fpm (FastCGI-Prozessmanager) um die (zum Zeitpunkt der Erstellung des Servers/der Dokumentation) neuste PHP zu nutzen und die Prozesse durch fpm zu beschleunigen.  
-
-Zur Installation für PHP und der benötigen Module für unsere Zwecke nutzen wir folgenden Befehl:
-
-```
-apt update && apt install php7.3-fpm php7.3-gd php7.3-mysql php7.3-curl php7.3-xml php7.3-zip php7.3-intl php7.3-mbstring php7.3-json php7.3-bz2 php7.3-ldap php-apcu imagemagick php-imagick php-smbclient -y
-```
-
-**Anmerkung:** Diese Pakete stammen unter anderem aus dem Repository welches wir bei der Einrichtung des Servers hinzugefügt haben. 
-
-Nun schauen wir ob die Zeitzone, die genutzt wird die ist, die wir brauchen. 
-```
-date
-```
-
-Zum setzen der Zeitzone kann dieser Befehl genutzt werden: 
- ```
-timedatectl set-timezone Europe/Berlin
-```
-
-Als nächsten ändern wir ein paar Einstellungen aus in diversen PHP-Konfigurations-Dateien, diese werden vorher gebackuped.
-
-```
-cp /etc/php/7.3/fpm/pool.d/www.conf /etc/php/7.3/fpm/pool.d/www.conf.bak
-cp /etc/php/7.3/cli/php.ini /etc/php/7.3/cli/php.ini.bak
-cp /etc/php/7.3/fpm/php.ini /etc/php/7.3/fpm/php.ini.bak
-cp /etc/php/7.3/fpm/php-fpm.conf /etc/php/7.3/fpm/php-fpm.conf.bak
-cp /etc/ImageMagick-6/policy.xml /etc/ImageMagick-6/policy.xml.bak
-```
-
-**Anmerkung:** Die folgenden Befehle ändern nur Werte in den Konfigurations-Dateien, diese Änderungen können auch mit einem beliebigen Editor vorgenommen werden. Die Terminaleingaben ersparen in diesem Fall das manuelle Suchen.  
-
-
-Zuerst beginnen wir mit `/etc/php/7.3/fpm/pool.d/www.conf`, dort werden ein paar Pfade, die auskommentiert sind, wieder aktiviert.
-
-```
-sed -i "s/;env\[HOSTNAME\] = /env[HOSTNAME] = /" /etc/php/7.3/fpm/pool.d/www.conf
-sed -i "s/;env\[TMP\] = /env[TMP] = /" /etc/php/7.3/fpm/pool.d/www.conf
-sed -i "s/;env\[TMPDIR\] = /env[TMPDIR] = /" /etc/php/7.3/fpm/pool.d/www.conf
-sed -i "s/;env\[TEMP\] = /env[TEMP] = /" /etc/php/7.3/fpm/pool.d/www.conf
-sed -i "s/;env\[PATH\] = /env[PATH] = /" /etc/php/7.3/fpm/pool.d/www.conf
-```
-
-Als nächstes ändern wir `/etc/php/7.3/cli/php.ini`, hier werden ein paar Größen wie maximale Dateigröße bei Uploads und maximale Ausführungszeit geändert, da wir auch beabsichtien den Cloud für größere Datein zu nutzen.
-
-```
-sed -i "s/output_buffering =.*/output_buffering = 'Off'/" /etc/php/7.3/cli/php.ini
-sed -i "s/max_execution_time =.*/max_execution_time = 3600/" /etc/php/7.3/cli/php.ini
-sed -i "s/max_input_time =.*/max_input_time = 3600/" /etc/php/7.3/cli/php.ini
-sed -i "s/post_max_size =.*/post_max_size = 10240M/" /etc/php/7.3/cli/php.ini
-sed -i "s/upload_max_filesize =.*/upload_max_filesize = 10240M/" /etc/php/7.3/cli/php.ini
-sed -i "s/;date.timezone.*/date.timezone = Europe\/\Berlin/" /etc/php/7.3/cli/php.ini
-```
-
-Diese und weitere Einstellungen werden auch in die Datei `/etc/php/7.3/fpm/php.ini` übernommen. Hier stellen wir zusätzliche Optionen für den fpm ein zur Verbesserung für die Performance.
-``` 
-sed -i "s/memory_limit = 128M/memory_limit = 512M/" /etc/php/7.3/fpm/php.ini
-sed -i "s/output_buffering =.*/output_buffering = 'Off'/" /etc/php/7.3/fpm/php.ini
-sed -i "s/max_execution_time =.*/max_execution_time = 3600/" /etc/php/7.3/fpm/php.ini
-sed -i "s/max_input_time =.*/max_input_time = 3600/" /etc/php/7.3/fpm/php.ini
-sed -i "s/post_max_size =.*/post_max_size = 10240M/" /etc/php/7.3/fpm/php.ini
-sed -i "s/upload_max_filesize =.*/upload_max_filesize = 10240M/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;date.timezone.*/date.timezone = Europe\/\Berlin/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;session.cookie_secure.*/session.cookie_secure = True/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.enable=.*/opcache.enable=1/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.enable_cli=.*/opcache.enable_cli=1/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.memory_consumption=.*/opcache.memory_consumption=128/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.interned_strings_buffer=.*/opcache.interned_strings_buffer=8/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.max_accelerated_files=.*/opcache.max_accelerated_files=10000/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.revalidate_freq=.*/opcache.revalidate_freq=1/" /etc/php/7.3/fpm/php.ini
-sed -i "s/;opcache.save_comments=.*/opcache.save_comments=1/" /etc/php/7.3/fpm/php.ini
-```
-
-Und letztendlich ändern wir noch die Rechte für PS, EPI, PDF und XPS Dateien in der `/etc/ImageMagick-6/policy.xml`. Das erlaubt und das Verarbeiten dieser Dateien durch PHP.
-
-```
-sed -i "s/rights=\"none\" pattern=\"PS\"/rights=\"read|write\" pattern=\"PS\"/" /etc/ImageMagick-6/policy.xml
-sed -i "s/rights=\"none\" pattern=\"EPI\"/rights=\"read|write\" pattern=\"EPI\"/" /etc/ImageMagick-6/policy.xml
-sed -i "s/rights=\"none\" pattern=\"PDF\"/rights=\"read|write\" pattern=\"PDF\"/" /etc/ImageMagick-6/policy.xml
-sed -i "s/rights=\"none\" pattern=\"XPS\"/rights=\"read|write\" pattern=\"XPS\"/" /etc/ImageMagick-6/policy.xml
-```
-
-Nun starten wir PHP und Nginx neu um die Einstellungen zu übernehmen.
-
-```
-service php7.3-fpm restart
-service nginx restart
-```
-
-#### Installation und Konfiguration von MariaDB
-
-Als Datenbanksoftware haben wir MariaDB gewählt, da diese neben MySQL von Nextcloud empfohlen wird. 
-
-Zuerst müssen wir die MariaDB-Pakete runterladen und installieren.
-
-```
-apt update && apt install mariadb-server -y
-```
-
-Um zu sehen ob dies erfolgreich war kann man die mysql-Version prüfen.
-```
-mysql --version
-```
-
-Das sollte eine ähnliche Ausgabe wie die Folgende erzeugen: 
-```
-mysql  Ver 15.1 Distrib 10.4.8-MariaDB, for debian-linux-gnu (x86_64) using readline 5.2
-```
-
-Als nächstes muss die Datenbank gesichert werden, der Prozess wird mit folgendem Befehl gestartet:
-``` 
-mysql_secure_installation
-```
-
-Nun werden diverse Abfragen durchgeführt, dieser werden wie angegeben beantwortet und Testzugänge/-daten zu entfernen, ein root-Passwort feszulegen und einen entfernen Zugriff auf das root-Konto zu unterbinden.
-
-```
-Switch to unix_socket authentication [Y/n] N
-Enter current password for root (enter for none): <ENTER>
-Set root password? [Y/n] Y
-Remove anonymous users? [Y/n] Y
-Disallow root login remotely? [Y/n] Y
-Remove test database and access to it? [Y/n] Y
-Reload privilege tables now? [Y/n] Y
-```
-
-Als nächstes müssen wir die Konfigurationsdatei ändern, dazu stoppen wir mysql, erstellen wieder ein Backup und öffnen diese in einem Editor.
-
-```
-service mysql stop
-mv /etc/mysql/my.cnf /etc/mysql/my.cnf.bak
-nano /etc/mysql/my.cnf
-```
-
-Diese Einstellungen werden wir für die Installation von Nextcloud verwenden: 
-``` 
-[client]
- default-character-set = utf8mb4
- port = 3306
- socket = /var/run/mysqld/mysqld.sock
-[mysqld_safe]
- log_error=/var/log/mysql/mysql_error.log
- nice = 0
- socket = /var/run/mysqld/mysqld.sock
-[mysqld]
- basedir = /usr
- bind-address = 127.0.0.1
- binlog_format = ROW
- bulk_insert_buffer_size = 16M
- character-set-server = utf8mb4
- collation-server = utf8mb4_general_ci
- concurrent_insert = 2
- connect_timeout = 5
- datadir = /var/lib/mysql
- default_storage_engine = InnoDB
- expire_logs_days = 10
- general_log_file = /var/log/mysql/mysql.log
- general_log = 0
- innodb_buffer_pool_size = 1024M
- innodb_buffer_pool_instances = 1
- innodb_flush_log_at_trx_commit = 2
- innodb_log_buffer_size = 32M
- innodb_max_dirty_pages_pct = 90
- innodb_file_per_table = 1
- innodb_open_files = 400
- innodb_io_capacity = 4000
- innodb_flush_method = O_DIRECT
- key_buffer_size = 128M
- lc_messages_dir = /usr/share/mysql
- lc_messages = en_US
- log_bin = /var/log/mysql/mariadb-bin
- log_bin_index = /var/log/mysql/mariadb-bin.index
- log_error=/var/log/mysql/mysql_error.log
- log_slow_verbosity = query_plan
- log_warnings = 2
- long_query_time = 1
- max_allowed_packet = 16M
- max_binlog_size = 100M
- max_connections = 200
- max_heap_table_size = 64M
- myisam_recover_options = BACKUP
- myisam_sort_buffer_size = 512M
- port = 3306
- pid-file = /var/run/mysqld/mysqld.pid
- query_cache_limit = 2M
- query_cache_size = 64M
- query_cache_type = 1
- query_cache_min_res_unit = 2k
- read_buffer_size = 2M
- read_rnd_buffer_size = 1M
- skip-external-locking
- skip-name-resolve
- slow_query_log_file = /var/log/mysql/mariadb-slow.log
- slow-query-log = 1
- socket = /var/run/mysqld/mysqld.sock
- sort_buffer_size = 4M
- table_open_cache = 400
- thread_cache_size = 128
- tmp_table_size = 64M
- tmpdir = /tmp
- transaction_isolation = READ-COMMITTED
- user = mysql
- wait_timeout = 600
-[mysqldump]
- max_allowed_packet = 16M
- quick
- quote-names
-[isamchk]
- key_buffer = 16M 
-```
-
-Wichtig in diesem Fall sind unter anderem `transaction_isolation = READ-COMMITTED` (normalerweise default-Einstellung für Transaktionen) und unser gewünschtes Encoding ` default-character-set = utf8mb4`
-
-Nun starten wir MariaDB neu und verbinden uns.
-
-``` 
-service mysql restart
-mysql -uroot -p
-```
-
-Nach Eingabe des Passworts erstellen wir die Datenbank, die Nextcloud benötigt.
-```
-CREATE DATABASE nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE USER nextcloud@localhost identified by '<Passwort>'; GRANT ALL PRIVILEGES on nextcloud.* to nextcloud@localhost; FLUSH privileges; quit;
-```
-
-`<Passwort>` muss in diesem Fall durch ein gültiges Passwort ersetzt werden.  
-
-Danach prüfen wir ob das Transaktionslevel und Kollation richtig gesetzt sind.
-``` 
-mysql -h localhost -uroot -p -e "SELECT @@TX_ISOLATION; SELECT SCHEMA_NAME 'database', default_character_set_name 'charset', DEFAULT_COLLATION_NAME 'collation' FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='nextcloud'"
-```
-
-Die gewünschten Ergebnisse sind `READ-COMMITTED` und `utf8mb4_general_ci`.
-
-#### Installation und Konfiguration von Redis
-
-Wir nutzen Redis um die Performance von Nextcloud zu verbessern und die Belastung der Datenbank zu minimieren. Diese Schritt ist rein optional.
-
-Zum Beginn muss Redis installiert werden.
-
-```
-apt update
-apt install redis-server php-redis -y
-```
-
-Als nächstes passen wir die Konfiguration an und erteilen Redis die benötigten Gruppenrechte. Hier wird ebenfalls ein Backup der Konfigurations-Datei erstellt.
-```
-cp /etc/redis/redis.conf /etc/redis/redis.conf.bak
-sed -i "s/port 6379/port 0/" /etc/redis/redis.conf
-sed -i s/\#\ unixsocket/\unixsocket/g /etc/redis/redis.conf
-sed -i "s/unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
-sed -i "s/# maxclients 10000/maxclients 512/" /etc/redis/redis.conf
-usermod -aG redis www-data
-```
-
-Zum Schluss setzen wir `overcommit_memory ` auf 1 um bei einem fork nicht den kompletten Datenbestand zu kopieren. 
-```
-cp /etc/sysctl.conf /etc/sysctl.conf.bak
-sed -i '$avm.overcommit_memory = 1' /etc/sysctl.conf
-```
-
-Nun muss der Server einmal mit `reboot now` neugestartet werden.
-
-   
 ### phpldapadmin
 
-Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
+#### Vorraussetzungen für phpLDAPadmin
+
+Zuerst müssen folgende PHP Module installiert werden, sofern diese noch nicht auf dem System vorhanden sind
+1. `sudo apt install php7.2-ldap`
+2. `sudo apt install php7.2-readline`
+3. `sudo apt install php7.2-xml`
+
+Desweiteren wird wegen der Zertifikate und der TLS Verschlüssel die folgenden Pakete installiert.
+* `sudo apt install gnutls-bin ssl-cert`
+
+Danach wird das Zertifikat der Zertifizierungsstelle (sihe LDAP Server - Übertragung des Zertifikates an den Cloud Servers) fertig einsatzbereit gemacht.
+1. `sudo chown root:root cacert.pem` - Das Zertifikat soll root und nicht dem User gehören
+2. `sudo mv cacert.pem /etc/ssl/certs` - Danach wird das Zertifikat in den Standard Linux Ordner verschoben.
+
+Jetzt muss nur noch die `ldap.conf` angepasst werden.
+1. `sudo nano /etc/ldap/ldap.conf` - LDAP Konfiguration anpassen
+2. `TLS_CACERT /etc/ssl/certs/cacert.pem` -Pfad des Zertifikates angeben, damit LDAP weiß auf welches Zertifikat zugegriffen werden soll
+3. `TLS_REQCERT demand` - Es soll nur eine Verbindung mit gültigem Zertifikat möglich sein, der Rest soll abgebrochen werden.
 
 #### Installation von phpLDAPadmin
 
@@ -493,7 +243,9 @@ Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
 	* `$servers->setValue('login','bind_pass','')` - Leer lassen und auskommentieren, da keine Funktionalität gewonnen wird und nur das Passwort im Klartext in einer Datei steht.
 	* `$servers->setValue('server','tls',true);` - TLS aktivieren, damit Interface und LDAP Server verschlüsselt kommunizieren könne. Der LDAP Server lehnt alle nicht TLS Verbindungen ab
 
-#### NGINX & phpLDAPadmin
+#### APACHE & phpLDAPadmin
+
+PLS FIX IT NOW
 
 Im Folgenden muss eine NGINX Konfig angelegt werden, damit die Subdomain wldap.hartlab.de auf die phpLDAPadmin Anwendung zeigt.
 
@@ -576,59 +328,83 @@ Im folgenden muss der LDAP Traffic des Cloud Servers erlaubt werden, damit diese
 2. `sudo ufw allow from 94.16.123.148 to any port ldap` - LDAP über IPv4 (IPv4 Adresse des Cloud Servers)
 3. `sudo ufw status` - Firewall Einstellungen prüfen
 
-### Zertifikat von Let's Encrypt
+### Zertifikat für TLS
 
-Ein Let's Encrypt Zertifikat wird genutzt, um die Verbindungen zum LDAP Server zu verschlüsseln.
+Ein selbstsigniertes Zertifikat wird genutzt, um die Verbindungen zum LDAP Server zu verschlüsseln.
 
-Das Zertifikat wird von Let's Encrypt bezogen, da es dort kostenfrei ist, jedoch ist es hier nur für 90 Tage 
-gültig und muss im besten Fall 30 Tage vorher neu bezogen werden.
+Dazu müssen die Pakete `gnutls-bin` und `ssl-cert` installiert werden.
+* `sudo apt install gnutls-bin ssl-cert`
 
-Für die Generierung / Erstellung des Zertifikats wird der von Let's Encrypt empfohlene CertBot genutzt.
-1. `sudo ufw allow 80` - Port 80 in der Firewall freigegeben, damit Let's Encrypt mit diesem Server kommunizieren kann.
-2. `sudo apt update`
-3. `sudo apt install certbot` - Certbot installieren
-4. `sudo certbot certonly --standalone` - Nur Zertifikat beziehen und keine Konfiguration vornehmen
-5. `sudo ls  /etc/letsencrypt/live` - Prüfen ob Zertifikat vorhanden ist
-6. `sudo ufw delete allow 80` - Port 80 in der Firewall wieder auf default setzen, in diesem Fall auf deny
+Als nächstest wird der private key für die Zertifizierungsstelle erstellet.
+* `sh -c "certtool --generate-privkey > /etc/ssl/private/cakey.pem"`
+    1. `--generate-privkey` - Certtool erstellt einen privaten Schlüssel
 
-Zertifikate in Standard SSL Verzeichnis von Linux kopieren, damit der slapd Deamon Zugang erhält.
-1. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/cert.pem /etc/ssl/certs/ldap.hartlab.de.cert.pem`
-2. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/fullchain.pem /etc/ssl/certs/ldap.hartlab.de.fullchain.pem`
-3. `sudo cp /etc/letsencrypt/live/ldap.hartlab.de/privkey.pem /etc/ssl/private/ldap.hartlab.de.privkey.pem`
+Danach wird ein Vorlage erstellt, um die Zertifizierungsstelle zu definieren. Dieses wird mit `sudo nano /etc/ssl/ca.info` gemacht und mit dem Inhalt befüllt:
+```
+cn = hartlab
+ca
+cert_signing_key
+```
 
-Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält, da die Let's Encrypt Zertifikate nur von Root 
-gelesen werden können.
-1. `sudo apt install ssl-cert` - Nur notwendig, wenn es sich um ein minimale Installation von Linux handelt, da sonst die 
-ssl-cert Gruppe nicht gibt
-2. `sudo chown :ssl-cert /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Gruppe ssl-cert der Datei hinzufügen
-3. `sudo chmopd 640 /etc/ssl/private/ldap.hartlab.de.privkey.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
+Nach dem diese Vorbereitungen abgeschlossen sind, kann nun ein selbstsigniertes Zertifikat erstellt werden.
+* `certtool --generate-self-signed --load-privkey /etc/ssl/private/cakey.pem --template /etc/ssl/ca.info --outfile /etc/ssl/certs/cacert.pem`
+    1. `--generate-self-signed` - Generiere eine selbstsigniertes Zertifikat
+    2. `--load-privkey` - Gibt den privaten Key an, welcher genutzt werden soll
+    3. `--template` - Definiert das Template
+    4. `--outfile` - Gibt den Ausgabeort an
+
+Erstelle einen privaten Schlüssel für den Server
+* `certtool --generate-privkey --bits 2048 --outfile /etc/ssl/private/ldap_slapd_key.pem`
+    1. `--generate-privkey` - Certtool erstellt einen privaten Schlüssel
+    2. `--bits` - Gibt die Numer an bits für die Schlüsselerstellung an
+    3. `--outfile` - Gibt den Ausgabeort an
+
+Danach wird ein weiters Template für das Server Zertifikat erstellt. Dazu wird die Datei `/etc/ssl/ldap.info` angelegt und folgender Inhalt wird eingefügt.
+```
+organization = hartlab
+cn = ldap.hartlab.de
+tls_www_server
+encryption_key
+signing_key
+expiration_days = 3650
+```
+
+Die angelegte Vorlage wird genutzt um das Server Zertifikat zu erstellen
+* `certtool --generate-certificate --load-privkey /etc/ssl/private/ldap_slapd_key.pem --load-ca-certificate /etc/ssl/certs/cacert.pem --load-ca-privkey /etc/ssl/private/cakey.pem --template /etc/ssl/ldap.info --outfile /etc/ssl/certs/ldap_slapd_cert.pem`
+
+Berechtigungen setzen, damit der slapd Deamon benötigte Berechtigung erhält.
+2. `sudo chown :ssl-cert /etc/ssl/private/ldap_slapd_key.pem` - Gruppe ssl-cert der Datei hinzufügen
+3. `sudo chmopd 640 /etc/ssl/private/ldap_slapd_key.pem` - Berechtigungen der Datei setzen, damit die System ssl-cert 
 Gruppe die Datei lesen kann
 4. `sudo usermod -aG ssl-cert openldap` - Nutzer openldap der Gruppe ssl-cert hinzufügen, damit das Zertifikat gelesen werden 
 kann
-5. `sudo systemctl restart slapd` - slapd Neustarten, damit die Zertifikate geladen werden
+5. `sudo systemctl restart slapd` - slapd Neustarten, damit die Zertifikate geladen werden können
 
 ### slapd mit Zertifikat konfigurieren 
 
 Erstellen einer LDIF - LDAP Data Interchange Format - Datei um die Konfiguration zu ändern, damit slapd die Zertifikate auch 
 nutzt
-1. Erstellen der Datei `cd ~` und `nano ssl.ldif` mit dem Inhalt:  
+1. Erstellen der Datei `cd ~` und `nano certinfo.ldif` mit dem Inhalt:
 ```
 dn: cn=config
 changetype: modify
 add: olcTLSCACertificateFile
-olcTLSCACertificateFile: /etc/ssl/certs/ldap.hartlab.de.fullchain.pem
+olcTLSCACertificateFile: /etc/ssl/certs/cacert.pem
 -
 add: olcTLSCertificateFile
-olcTLSCertificateFile: /etc/ssl/certs/ldap.hartlab.de.cert.pem
+olcTLSCertificateFile: /etc/ssl/certs/ldap_slapd_cert.pem
 -
 add: olcTLSCertificateKeyFile
-olcTLSCertificateKeyFile: /etc/ssl/private/ldap.hartlab.de.privkey.pem
+olcTLSCertificateKeyFile: /etc/ssl/private/ldap_slapd_key.pem
+
 ```
 2. Datei speichern und schließen
-3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ssl.ldif` anwenden, ein reload des slapd Deamons ist nicht 
+3. Änderungen mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f certinfo.ldif` anwenden, ein reload des slapd Deamons ist nicht 
 notwendig, da ldapmodify dieses sleber macht
 4. Mit `ldapwhoami -H ldap://ldap.hartlab.de -x -ZZ` die Konfiguration prüfen, der Hostname ist notwendig, da das Zertifikat 
 abgeprüft wird.
+
+### STARTTLS erzwingen
 
 STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
 1. Änderung der Hosts Datei, damit der FQDN richtig gesetzt ist mit `sudo nano /etc/hosts`
@@ -639,15 +415,143 @@ STARTTLS erzwingen, damit keine unverschlüsselten Verbindungen möglich sind
 dn: olcDatabase={1}mdb,cn=config
 olcSuffix: dc=hartlab,dc=de
 ```
-5. Erstellen einer LDIF Datei um Änderungen vorzubereiten `nano ~/tls.ldif` und dem Inhalt:
+5. Erstellen einer LDIF Datei um Änderungen vorzubereiten `nano ~/enforceTLS.ldif` und dem Inhalt:
 ```
 dn: olcDatabase={1}mdb,cn=config
 changetype: modify
 add: olcSecurity
 olcSecurity: tls=1
 ```
-6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f tls.ldif`
+6. Änderungen laden mit `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f enforceTLS.ldif`
 7. Prüfen, ob nur noch eine Verbindung mit SSL möglich ist
 	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL dn`, sollte mit der Fehlermeldung `TLS confidentiality 
 required` scheitern
 	* `ldapsearch -H ldap:// -x -b "dc=example,dc=com" -LLL -Z dn`, sollte ohne Fehlermeldung funktionieren
+
+### Änderungen an LDAP Konfig
+
+Bearbeiten der `ldap.conf`, damit das vorher erstellte Zertifikat genutzt wird.
+* `sudo nano /etc/ldap/ldap.conf`
+    1. Eintrag `TLS_CACERT /etc/ssl/certs/cacert.pem` anlegen.
+
+Anschließend wird der LDAP Deamon mit `sudo systemctl restart slapd` neugestart.
+
+### Übertragung des Zertifikates an den Cloud Servers
+
+Damit der Cloud Server dem Zertifikat der Zertifizierungsstelle traut, wird dieses auf den Cloud Server kopiert.
+* `sudo scp /etc/ssl/certs/cacert.pem USERNAME@cloud.hartlab.de:~USERNAME/`
+
+### Konfigurationsanpassungen
+
+#### Erstellen eines Admin-Accounts für die slapd-Datenbank
+
+Da standardmäßig kein Adminstrationsaccount für die slapd-Konfig Datenbank angelegt wird, erstellen wir diesen.
+1. Erstellen eines ssha verschlüsselten Passworts: `slappasswd -h {ssha} >> config.ldif` und Ablage diese in der `config.ldif` Datei.
+2. Ausfüllen der LDIF Datei mit den notwendigen Konfigurationsänderungen `nano config.ldif`
+
+```
+dn: cn=config
+changetype: modify
+
+dn: olcDatabase={0}config,cn=config
+changetype: modify
+add: olcRootDN
+olcRootDN: cn=admin,cn=config
+
+dn: olcDatabase={0}config,cn=config
+changetype: modify
+add: olcRootPW
+olcRootPW: {SSHA}HASH_MEINES_PASSWORTS
+```
+3. `dn: olcDatabase={0}config,cn=config` bedeutet, dass die Änderungen in der Konfig Datenbank gemacht werden sollen
+4. Zuerst wird ein Admin Account angelegt und dann wird dessen Passwort geändert
+5. Änderungen auf dem LDAP-Server durchführen mit `sudo ldapadd -Y EXTERNAL  -h ldapi:/// -f config.ldif`
+6. Testen der Änderungen mit `ldapsearch -W -LLL -D cn=admin,cn=config -b cn=config dn`
+
+#### Konfiguration von Overlays
+
+Overlays sind Software Komponenten, welche Funktionen bereitstellen. Diese sitzen zwischen Front- und Backend.
+
+##### Passwort Policy Overlay
+
+Als erstes muss das ppolicy Schema geladen werden, da sonst kein Passwort Policy eingestellt werden können
+* ``ldapadd -W -D "cn=admin,cn=config" -f /etc/ldap/schema/ppolicy.ldif`
+
+Danach muss das Passwort Policy Modul geladen werden, dazu erstellen wir die `ppolicymodule.ldif` Datei
+```
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: ppolicy.la
+```
+und laden diese mit `ldapmodify -W -D "cn=admin,cn=config" -f ppolicymodule.ldif`
+
+Im Folgenden erstellen wir uns erstes Passwort Policy Overlay `ppolicyoverlay.ldif`
+```
+dn: olcOverlay=ppolicy,olcDatabase={1}mdb,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: ppolicy
+olcPPolicyDefault: cn=userPasswordPolicy,ou=pwpolicies,dc=hartlab,dc=de
+olcPPolicyHashCleartext: TRUE
+olcPPolicyUseLockout: FALSE
+olcPPolicyForwardUpdates: FALSE
+```
+* `olcPPolicyDefault` - Gibt den default dn für die Passwort Policy an
+* `olcPPolicyHashCleartext` - Setzt fest, ob Klartext Passwörter mit dem standardmäßigen Hash-Algorithmus verschlüsselt werden soll
+* `olcPPolicyUseLockout` - Setzt fest, ob AccountLocked als Fehler zurück gegeben werden soll, aus diesem können Hacker rückschlüsse ziehen
+* `olcPPolicyForwardUpdates` - Nur für slave Konfiguration
+
+Nun muss nur noch die Konfiguration geladen werden: `ldapadd -W -D cn=admin,cn=config -f ppolicyoverlay.ldif`
+
+##### memberOf Overlay
+
+Um in Queries leichter herauszufinden, welcher Nutzer in einer bestimmten Gruppe ist und weil NextCloud dieses Modul braucht, brauchen wir das memberOf Modul. 
+
+Zuerst muss das Modul aktiviert werden, dazu legen wir uns die `memberOfmodule.ldif` Datei mit dem folgenden Inhalt
+```
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: memberof.la
+```
+an und laden die Änderungen mit `ldapadd -W -D cn=admin,cn=config -f memberOfmodule.ldif`.
+
+Im nächsten Schritt konfigurieren und aktivieren wir das Overlay. Dazu legen wir die Datei `memberOfconfig.ldif` an.
+```
+dn: olcOverlay=memberof,olcDatabase={1}mdb,cn=config
+changetype: add
+objectClass: olcConfig
+objectClass: olcMemberOf
+objectClass: olcOverlayConfig
+objectClass: top
+olcOverlay: memberof
+olcMemberOfDangling: ignore
+olcMemberOfRefInt: TRUE
+olcMemberOfGroupOC: groupOfNames
+olcMemberOfMemberAD: member
+olcMemberOfMemberOfAD: memberOf
+```
+
+Danach wird das Overlay auf dem LDAP Server erstellt.
+* `ldapadd -W -D cn=admin,cn=config -f memberOfconfig.ldif`
+
+Damit die Integrität der Referenzen, bei Nutzeränderungen, bestehen bleibt muss ein weiters Overlay aktiviert werden.
+1. `sudo nano refintmod.ldif`
+```
+dn: cn=module{0},cn=config
+add: olcmoduleload
+olcmoduleload: refint
+```
+2. `ldapmodify -W -D cn=admin,cn=config -f refintmod.ldif`
+3.  `sudo nano refintconfig.ldif`
+```
+dn: olcOverlay=refint,olcDatabase={1}mdb,cn=config
+objectClass: olcConfig
+objectClass: olcOverlayConfig
+objectClass: olcRefintConfig
+objectClass: top
+olcOverlay: refint
+olcRefintAttribute: memberof member manager owner
+```
+4. `ldapadd -W -D cn=admin,cn=config -f refintconfig.ldif`
