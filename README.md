@@ -445,9 +445,10 @@ Damit der Cloud Server dem Zertifikat der Zertifizierungsstelle traut, wird dies
 
 #### Erstellen eines Admin-Accounts für die slapd-Datenbank
 
-Da standardmäßig kein Administration für die slapd-Konfig Datenbank angelegt wird, erstellen wir diesen.
-1. Erstellen eines ssha verschlüsselten Passworts: `slappasswd -h {ssha} >> config.ldif` und ablage diese in der `config.ldif` Datei.
+Da standardmäßig kein Adminstrationsaccount für die slapd-Konfig Datenbank angelegt wird, erstellen wir diesen.
+1. Erstellen eines ssha verschlüsselten Passworts: `slappasswd -h {ssha} >> config.ldif` und Ablage diese in der `config.ldif` Datei.
 2. Ausfüllen der LDIF Datei mit den notwendigen Konfigurationsänderungen `nano config.ldif`
+
 ```
 dn: cn=config
 changetype: modify
@@ -462,10 +463,10 @@ changetype: modify
 add: olcRootPW
 olcRootPW: {SSHA}HASH_MEINES_PASSWORTS
 ```
-	* `dn: olcDatabase={0}config,cn=config` bedeutet, dass die Änderungen in der Konfig Datenbank gemacht werden sollen
-	* Zu erst wird ein Admin Account angelegt und dann wird dessen Passwort geändert
-3. Änderungen auf dem LDAP-Server durchführen mit `sudo ldapadd -Y EXTERNAL  -h ldapi:/// -f config.ldif`
-4. Testen der Änderungen mit `ldapsearch -W -LLL -D cn=admin,cn=config -b cn=config dn`
+3. `dn: olcDatabase={0}config,cn=config` bedeutet, dass die Änderungen in der Konfig Datenbank gemacht werden sollen
+4. Zuerst wird ein Admin Account angelegt und dann wird dessen Passwort geändert
+5. Änderungen auf dem LDAP-Server durchführen mit `sudo ldapadd -Y EXTERNAL  -h ldapi:/// -f config.ldif`
+6. Testen der Änderungen mit `ldapsearch -W -LLL -D cn=admin,cn=config -b cn=config dn`
 
 #### Konfiguration von Overlays
 
@@ -473,7 +474,7 @@ Overlays sind Software Komponenten, welche Funktionen bereitstellen. Diese sitze
 
 ##### Passwort Policy Overlay
 
-Als erstes muss das ppolicy Schema geladen werden, da sonst keine Passwort Policy eingestellt werden können
+Als erstes muss das ppolicy Schema geladen werden, da sonst kein Passwort Policy eingestellt werden können
 * ``ldapadd -W -D "cn=admin,cn=config" -f /etc/ldap/schema/ppolicy.ldif`
 
 Danach muss das Passwort Policy Modul geladen werden, dazu erstellen wir die `ppolicymodule.ldif` Datei
@@ -496,7 +497,7 @@ olcPPolicyHashCleartext: TRUE
 olcPPolicyUseLockout: FALSE
 olcPPolicyForwardUpdates: FALSE
 ```
-* `olcPPolicyDefault` - 
+* `olcPPolicyDefault` - Gibt den default dn für die Passwort Policy an
 * `olcPPolicyHashCleartext` - Setzt fest, ob Klartext Passwörter mit dem standardmäßigen Hash-Algorithmus verschlüsselt werden soll
 * `olcPPolicyUseLockout` - Setzt fest, ob AccountLocked als Fehler zurück gegeben werden soll, aus diesem können Hacker rückschlüsse ziehen
 * `olcPPolicyForwardUpdates` - Nur für slave Konfiguration
@@ -505,16 +506,16 @@ Nun muss nur noch die Konfiguration geladen werden: `ldapadd -W -D cn=admin,cn=c
 
 ##### memberOf Overlay
 
-Um in Queries leichter herauszufinden, welcher Nutzer in einer bestimmtem Gruppe ist und weil NextCloud dieses Modul braucht, brauchen wird das memberOf Modul. 
+Um in Queries leichter herauszufinden, welcher Nutzer in einer bestimmten Gruppe ist und weil NextCloud dieses Modul braucht, brauchen wir das memberOf Modul. 
 
-Zu erst muss des Modul aktiviert werden, dazu legen wir uns die `memberOfmodule.ldif` Datei mit dem folgenden Inhalt
+Zuerst muss das Modul aktiviert werden, dazu legen wir uns die `memberOfmodule.ldif` Datei mit dem folgenden Inhalt
 ```
 dn: cn=module{0},cn=config
 changetype: modify
 add: olcModuleLoad
 olcModuleLoad: memberof.la
 ```
-an und laden die Änderungen mit `ldapadd -W -D cn=admin,cn=config -f memberOfmodule.ldif`
+an und laden die Änderungen mit `ldapadd -W -D cn=admin,cn=config -f memberOfmodule.ldif`.
 
 Im nächsten Schritt konfigurieren und aktivieren wir das Overlay. Dazu legen wir die Datei `memberOfconfig.ldif` an.
 ```
