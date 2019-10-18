@@ -46,7 +46,7 @@ In der SSH-Config wird der Login von Root unterbinden, umso einen mögliches Bru
 3. Falls alle Nutzer ssh-Keys hinterlegt haben, kann `PasswordAuthentication` von `yes` auf `no` gesetzt werden, da jedoch nur Passwörter genutzt worden sind bleibt der Wert auf `yes`
 4. SSH (Deamon)  mit `sudo systemctl restart ssh` neustarten, damit die Änderungen übernommen werden.
 
-Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `cloud` und der LDAP Server den Hostname `ldap`.
+Beide Server erhalten einen Hostname zur leichteren Identifizierung. Der Nextcloud Server erhält den Hostname `wpp` und der LDAP Server den Hostname `ldap`.
 1. Hostname setzen durch `sudo hostnamectl set-hostname HOSTNAME`
 
 Um auch IPv6 zu nutzen müssen Einstellungen im Network Interface gemacht werden. IPv6 wird vorausschauend aktiviert, es könnte gebraucht werden.
@@ -203,14 +203,12 @@ chown -R www-data:www-data /var/nc_data /var/www
 
 ### phpldapadmin
 
-Für das Webinterface wurde eine weiter Subdomain (wldap.hartlab.de) auf die IPs des Cloud Servers gebunden, damit die Konfiguration über NGINX leichter fällt und die Zugriffe nicht auf NextCloud ausgeführt werden.
-
 #### Vorraussetzungen für phpLDAPadmin
 
 Zuerst müssen folgende PHP Module installiert werden, sofern diese noch nicht auf dem System vorhanden sind
-1. `sudo apt install php7.3-ldap`
-2. `sudo apt install php7.3-readline`
-3. `sudo apt install php7.3-xml`
+1. `sudo apt install php7.2-ldap`
+2. `sudo apt install php7.2-readline`
+3. `sudo apt install php7.2-xml`
 
 Desweiteren wird wegen der Zertifikate und der TLS Verschlüssel die folgenden Pakete installiert.
 * `sudo apt install gnutls-bin ssl-cert`
@@ -245,7 +243,9 @@ Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
 	* `$servers->setValue('login','bind_pass','')` - Leer lassen und auskommentieren, da keine Funktionalität gewonnen wird und nur das Passwort im Klartext in einer Datei steht.
 	* `$servers->setValue('server','tls',true);` - TLS aktivieren, damit Interface und LDAP Server verschlüsselt kommunizieren könne. Der LDAP Server lehnt alle nicht TLS Verbindungen ab
 
-#### NGINX & phpLDAPadmin
+#### APACHE & phpLDAPadmin
+
+PLS FIX IT NOW
 
 Im Folgenden muss eine NGINX Konfig angelegt werden, damit die Subdomain wldap.hartlab.de auf die phpLDAPadmin Anwendung zeigt.
 
@@ -440,3 +440,117 @@ Anschließend wird der LDAP Deamon mit `sudo systemctl restart slapd` neugestart
 
 Damit der Cloud Server dem Zertifikat der Zertifizierungsstelle traut, wird dieses auf den Cloud Server kopiert.
 * `sudo scp /etc/ssl/certs/cacert.pem USERNAME@cloud.hartlab.de:~USERNAME/`
+
+### Konfigurationsanpassungen
+
+#### Erstellen eines Admin-Accounts für die slapd-Datenbank
+
+Da standardmäßig kein Administration für die slapd-Konfig Datenbank angelegt wird, erstellen wir diesen.
+1. Erstellen eines ssha verschlüsselten Passworts: `slappasswd -h {ssha} >> config.ldif` und ablage diese in der `config.ldif` Datei.
+2. Ausfüllen der LDIF Datei mit den notwendigen Konfigurationsänderungen `nano config.ldif`
+```
+dn: cn=config
+changetype: modify
+
+dn: olcDatabase={0}config,cn=config
+changetype: modify
+add: olcRootDN
+olcRootDN: cn=admin,cn=config
+
+dn: olcDatabase={0}config,cn=config
+changetype: modify
+add: olcRootPW
+olcRootPW: {SSHA}HASH_MEINES_PASSWORTS
+```
+	* `dn: olcDatabase={0}config,cn=config` bedeutet, dass die Änderungen in der Konfig Datenbank gemacht werden sollen
+	* Zu erst wird ein Admin Account angelegt und dann wird dessen Passwort geändert
+3. Änderungen auf dem LDAP-Server durchführen mit `sudo ldapadd -Y EXTERNAL  -h ldapi:/// -f config.ldif`
+4. Testen der Änderungen mit `ldapsearch -W -LLL -D cn=admin,cn=config -b cn=config dn`
+
+#### Konfiguration von Overlays
+
+Overlays sind Software Komponenten, welche Funktionen bereitstellen. Diese sitzen zwischen Front- und Backend.
+
+##### Passwort Policy Overlay
+
+Als erstes muss das ppolicy Schema geladen werden, da sonst keine Passwort Policy eingestellt werden können
+* ``ldapadd -W -D "cn=admin,cn=config" -f /etc/ldap/schema/ppolicy.ldif`
+
+Danach muss das Passwort Policy Modul geladen werden, dazu erstellen wir die `ppolicymodule.ldif` Datei
+```
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: ppolicy.la
+```
+und laden diese mit `ldapmodify -W -D "cn=admin,cn=config" -f ppolicymodule.ldif`
+
+Im Folgenden erstellen wir uns erstes Passwort Policy Overlay `ppolicyoverlay.ldif`
+```
+dn: olcOverlay=ppolicy,olcDatabase={1}mdb,cn=config
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: ppolicy
+olcPPolicyDefault: cn=userPasswordPolicy,ou=pwpolicies,dc=hartlab,dc=de
+olcPPolicyHashCleartext: TRUE
+olcPPolicyUseLockout: FALSE
+olcPPolicyForwardUpdates: FALSE
+```
+* `olcPPolicyDefault` - 
+* `olcPPolicyHashCleartext` - Setzt fest, ob Klartext Passwörter mit dem standardmäßigen Hash-Algorithmus verschlüsselt werden soll
+* `olcPPolicyUseLockout` - Setzt fest, ob AccountLocked als Fehler zurück gegeben werden soll, aus diesem können Hacker rückschlüsse ziehen
+* `olcPPolicyForwardUpdates` - Nur für slave Konfiguration
+
+Nun muss nur noch die Konfiguration geladen werden: `ldapadd -W -D cn=admin,cn=config -f ppolicyoverlay.ldif`
+
+##### memberOf Overlay
+
+Um in Queries leichter herauszufinden, welcher Nutzer in einer bestimmtem Gruppe ist und weil NextCloud dieses Modul braucht, brauchen wird das memberOf Modul. 
+
+Zu erst muss des Modul aktiviert werden, dazu legen wir uns die `memberOfmodule.ldif` Datei mit dem folgenden Inhalt
+```
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: memberof.la
+```
+an und laden die Änderungen mit `ldapadd -W -D cn=admin,cn=config -f memberOfmodule.ldif`
+
+Im nächsten Schritt konfigurieren und aktivieren wir das Overlay. Dazu legen wir die Datei `memberOfconfig.ldif` an.
+```
+dn: olcOverlay=memberof,olcDatabase={1}mdb,cn=config
+changetype: add
+objectClass: olcConfig
+objectClass: olcMemberOf
+objectClass: olcOverlayConfig
+objectClass: top
+olcOverlay: memberof
+olcMemberOfDangling: ignore
+olcMemberOfRefInt: TRUE
+olcMemberOfGroupOC: groupOfNames
+olcMemberOfMemberAD: member
+olcMemberOfMemberOfAD: memberOf
+```
+
+Danach wird das Overlay auf dem LDAP Server erstellt.
+* `ldapadd -W -D cn=admin,cn=config -f memberOfconfig.ldif`
+
+Damit die Integrität der Referenzen, bei Nutzeränderungen, bestehen bleibt muss ein weiters Overlay aktiviert werden.
+1. `sudo nano refintmod.ldif`
+```
+dn: cn=module{0},cn=config
+add: olcmoduleload
+olcmoduleload: refint
+```
+2. `ldapmodify -W -D cn=admin,cn=config -f refintmod.ldif`
+3.  `sudo nano refintconfig.ldif`
+```
+dn: olcOverlay=refint,olcDatabase={1}mdb,cn=config
+objectClass: olcConfig
+objectClass: olcOverlayConfig
+objectClass: olcRefintConfig
+objectClass: top
+olcOverlay: refint
+olcRefintAttribute: memberof member manager owner
+```
+4. `ldapadd -W -D cn=admin,cn=config -f refintconfig.ldif`
