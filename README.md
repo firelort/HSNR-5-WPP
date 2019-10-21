@@ -163,6 +163,13 @@ Alias /ldapadmin "/var/www/ldapadmin/htdocs"
 
 Im Grunde werden hier nur den lokalen Ordnern Adressen zugewiesen und im Falle von Nextcloud auch Weiterleitungen eingerichtet, damit alle Anfragen die sich auf Nextcloud beziehen an die Index Datei weitergeleitet werden.
 
+Da wir diese Dateien auch im `sites-enabled` Order benötigen erstellen wir in diesem Links zu den Originalen:
+```
+cd /etc/apache2/sites-available
+ln -s -r ldapadmin.conf ../sites-enabled/ldapadmin.conf
+ln -s -r nextcloud.conf ../sites-enabled/nextcloud.conf
+```
+
 #### Installation und Konfigurierung von PHP 7.2 (fpm)
 
 Für Nextcloud sowie phpLDAPadmin brauchen wir PHP, wir nutzen PHP 7.2-fpm (FastCGI-Prozessmanager) um die Prozesse durch fpm zu beschleunigen.  
@@ -241,13 +248,107 @@ sed -i "s/rights=\"none\" pattern=\"PDF\"/rights=\"read|write\" pattern=\"PDF\"/
 sed -i "s/rights=\"none\" pattern=\"XPS\"/rights=\"read|write\" pattern=\"XPS\"/" /etc/ImageMagick-6/policy.xml
 ```
 
-Nun starten wir PHP und Nginx neu um die Einstellungen zu übernehmen.
+Nun starten wir PHP und Apache2 neu um die Einstellungen zu übernehmen.
 
 ```
 service php7.2-fpm restart
 service apache2 restart
 ```
 
+
+#### Installation und Konfiguration von MariaDB
+
+Als Datenbanksoftware haben wir MariaDB gewählt, da diese neben MySQL von Nextcloud empfohlen wird. 
+
+Zuerst müssen wir die MariaDB-Pakete runterladen und installieren.
+
+```
+apt update && apt install mariadb-server -y
+```
+
+Um zu sehen ob dies erfolgreich war kann man die mysql-Version prüfen.
+```
+mysql --version
+```
+
+Das sollte eine ähnliche Ausgabe wie die Folgende erzeugen: 
+```
+mysql  Ver 15.1 Distrib 10.4.8-MariaDB, for debian-linux-gnu (x86_64) using readline 5.2
+```
+
+Als nächstes muss die Datenbank gesichert werden, der Prozess wird mit folgendem Befehl gestartet:
+``` 
+mysql_secure_installation
+```
+
+Nun werden diverse Abfragen durchgeführt, dieser werden wie angegeben beantwortet und Testzugänge/-daten zu entfernen, ein root-Passwort feszulegen und einen entfernen Zugriff auf das root-Konto zu unterbinden.
+
+```
+Switch to unix_socket authentication [Y/n] N
+Enter current password for root (enter for none): <ENTER>
+Set root password? [Y/n] Y
+Remove anonymous users? [Y/n] Y
+Disallow root login remotely? [Y/n] Y
+Remove test database and access to it? [Y/n] Y
+Reload privilege tables now? [Y/n] Y
+```
+
+Nun starten wir MariaDB neu und verbinden uns.
+
+``` 
+service mysql restart
+mysql -uroot -p
+```
+
+Nach Eingabe des Passworts erstellen wir die Datenbank, die Nextcloud benötigt.
+```
+CREATE DATABASE nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE USER nextcloud@localhost identified by '<Passwort>'; GRANT ALL PRIVILEGES on nextcloud.* to nextcloud@localhost; FLUSH privileges; quit;
+```
+
+`<Passwort>` muss in diesem Fall durch ein gültiges Passwort ersetzt werden.  
+
+Danach prüfen wir ob das Transaktionslevel und Kollation richtig gesetzt sind.
+``` 
+mysql -h localhost -uroot -p -e "SELECT @@TX_ISOLATION; SELECT SCHEMA_NAME 'database', default_character_set_name 'charset', DEFAULT_COLLATION_NAME 'collation' FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='nextcloud'"
+```
+
+Die gewünschten Ergebnisse sind `READ-COMMITTED` und `utf8mb4_general_ci`.
+
+#### Einrichtung von SSL für Nextcloud 
+
+Für die Einrichtung von SSL benutzen wir CertBot, dazu werden folgende Befehle eingegeben.
+
+Zum updaten/installieren der benötigten Pakete:
+```
+sudo apt-get update
+sudo apt-get install software-properties-common
+sudo add-apt-repository universe
+sudo add-apt-repository ppa:certbot/certbot
+sudo apt-get update
+```
+
+Die Installation von CertBot: 
+```
+sudo apt-get install certbot python-certbot-apache
+```
+
+Und die Einrichtung von Zertifikaten für Apache2:
+**Anmerkung:** Der Folgende Befehl bearbeitet die Konfigurationsdateien von Apache2, sodass automatisch die Zertifikate generiert und erkannt werden.
+```
+sudo certbot --apache
+```
+
+### Installation von Nextcloud
+
+Zum Beginn der Installation benötigen wir die Dateien für Nextcloud, wir beziehen diese direkt von Nextcloud selber und wählen die neuste Version (17 zum Zeitpunkt dieser Dokumentation).
+Dann entpacken wir die Dateien, schieben sie in den www Ornder und setzen benötigte Rechte. Die runtergeladene Archivdatei wird gelöscht, da sie nicht wieter benötigt wird.
+
+```
+wget https://download.nextcloud.com/server/releases/latest.tar.bz2
+tar -xjf latest.tar.bz2 -C /var/www && chown -R www-data:www-data /var/www/ && rm -f latest.tar.bz2
+```
+
+Nun kann unter `wpp.hartlab.de/nextcloud` Nextcloud installiert werden. Alle Angaben müssen entsprechen der Vorkonfiguration eingegeben werden.
 
 ### phpldapadmin
 
@@ -290,63 +391,7 @@ Jetzt muss die Konfiguration von phpLDAPadmin angepasst werden.
 	* `$servers->setValue('login','bind_id','');` - Leer lassen und auskommentieren, da sonst im Interface der Nutzername vorausgefüllt ist.
 	* `$servers->setValue('login','bind_pass','')` - Leer lassen und auskommentieren, da keine Funktionalität gewonnen wird und nur das Passwort im Klartext in einer Datei steht.
 	* `$servers->setValue('server','tls',true);` - TLS aktivieren, damit Interface und LDAP Server verschlüsselt kommunizieren könne. Der LDAP Server lehnt alle nicht TLS Verbindungen ab
-
-#### APACHE & phpLDAPadmin
-
-PLS FIX IT NOW
-
-Im Folgenden muss eine NGINX Konfig angelegt werden, damit die Subdomain wldap.hartlab.de auf die phpLDAPadmin Anwendung zeigt.
-
-Dazu legen wir eine neue config Datei im `conf.d` Ordner mit `sudo nano /etc/nginx/conf.d/ldapadmin.conf` an. Folgender Inhalt sollte übernommen werden.
-```
-server {
-	server_name wldap.hartlab.de;
-	listen 80;
-	listen [::]:80;
-
-	location ^~ /.well-known/acme-challenge {
-		proxy_pass http://127.0.0.1:83;
-		proxy_set_header Host $host;
-	}
 	
-	location / {
-		return 301 https://$host$request_uri;
-	}
-}
-
-
-server {
-	server_name wldap.hartlab.de;
-	listen 443 ssl http2;
-	listen [::]:443 ssl;
-
-	location = /robots.txt {
-		allow all;
-		log_not_found off;
-		access_log off;
-	}
-	
-	client_max_body_size 10240M;
-	
-	root /var/www/ldapadmin/;
-	index index.php index.html index.htm;
-
-    # default php handler
-    location ~ \.php$ {
-            fastcgi_pass unix:/run/php/php7.3-fpm.sock;
-            fastcgi_index index.php;
-            fastcgi_param SCRIPT_FILENAME  $document_root/$fastcgi_script_name;
-            include fastcgi_params;
-            fastcgi_param HTTPS on;
-    }
-
-}
-```
-
-Es erfolgt ein rewrite aller Anfragen auf HTTPS. Mit der Ausnahme, dass die für Let's Encrypt benötigten Anfragen, weiterhin nur über HTTP bearbeitet werden und in den richtigen Ordner weiterleiten. Alle PHP Dateien werden mithilfe von PHP-FPM ausgeführt.
-
-Nach diesen Einstellungen muss der NGINX Server mit `sudo systemctl restart nginx` neugestartet werden.
-
 ## LDAP Server
 
 ### ufw Firewall
