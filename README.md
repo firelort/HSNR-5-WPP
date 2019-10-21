@@ -648,3 +648,21 @@ olcOverlay: refint
 olcRefintAttribute: memberof member manager owner
 ```
 4. `ldapadd -W -D cn=admin,cn=config -f refintconfig.ldif`
+
+
+## Verknüpfung von Nextcloud und LDAP
+
+Um die Integrtion von LDAP in Nextcloud zu vollenden muss diese nun über Nextcloud eingerichtet werden.
+
+Dazu klickt man auf sein Profilicon (oben rechts im Browserfenster, überlicherweise der Anfangsbuchstabe des Accounts), klickt dann auf `Apps`.  
+Dort erscheint eine neue Listenansicht, dort muss nach dem Eintrag `LDAP user and group backend` gesucht werden, ist dieser deaktiviert muss man diesen aktiveren, andernfalls ist keine Aktion notwendig.  
+Sobald LDAP aktiv ist muss man wieder auf das Profilbild klicken, in der neuen Ansicht links in der Navigation `LDAP/AD-Integration` suchen und anwählen.
+
+Nun erscheint die LDAP Eingabemaske, geben die die Daten wie folgt ein.
+
+![](ldap1.png)
+![](ldap2.png)
+![](ldap3.png)
+![](ldap4.png)
+![](ldap5.png)
+
