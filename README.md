@@ -6,7 +6,7 @@ von Robert Hartings und Alexander Niersmann
 
 Es werden zwei Server von NetCup bezogen. 
 
-Ein Server wird nur für LDAP genutzt. Auf dem anderen Server läuft ein NGINX Webserver, sodass NextCloud und phpldap erreichbar sind. Diese machen wir, damit LDAP und die anderen Systeme nicht auf einer Maschine laufen, um so eine realistische LDAP Nutzung zu simulieren.
+Ein Server wird nur für LDAP genutzt. Auf dem anderen Server läuft ein Apache2 Webserver, sodass NextCloud und phpldap (auch ldapadmin genannt) erreichbar sind. Diese machen wir, damit LDAP und die anderen Systeme nicht auf einer Maschine laufen, um so eine realistische LDAP Nutzung zu simulieren.
 
 ## Serverhardware
 
@@ -73,14 +73,14 @@ network:
 
 Die Adressen, Gateways und Nameserver sind von Netcup vorgegeben worden.
 
-Für IPv4 und IPv6 wurde bei beiden Servern ein rDNS Eintrag gesetzt. Für den NextCloud Server wurde die Domain cloud.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die DNS Einstellungen der Domain übernommen. So ist eine Nutzung der IP-Adressen für SSH 
+Für IPv4 und IPv6 wurde bei beiden Servern ein rDNS Eintrag gesetzt. Für den NextCloud Server wurde die Domain wpp.hartlab.de und den LDAP Server die Domain ldap.hartlab.de genutzt und auch in die DNS Einstellungen der Domain übernommen. So ist eine Nutzung der IP-Adressen für SSH 
 und Weboberfläche nicht mehr notwendig. Des Weiteren ist nur mit einem Domainnamen ein Zertifikat von Let's Encrypt beantragbar. 
 
 ## Cloud Server - NextCloud & phpldapadmin
 
 ### Nextcloud 
 
-Für Nextcloud wurde eine Subdomain (cloud.hardlab.de) auf die IP des Servers (Cloud Server im Folgenden) angelegt. Dies dient der einfachereren Handhabung der Installation, für die Anwendung durch Benutzer und Zertifikate.
+Für Nextcloud wurde eine Subdomain (wpp.hardlab.de) auf die IP des Servers (Cloud Server im Folgenden) angelegt. Dies dient der einfachereren Handhabung der Installation, für die Anwendung durch Benutzer und Zertifikate.
 
 #### Vorbereitung des Cloud Servers  
 
@@ -532,7 +532,7 @@ Anschließend wird der LDAP Deamon mit `sudo systemctl restart slapd` neugestart
 ### Übertragung des Zertifikates an den Cloud Servers
 
 Damit der Cloud Server dem Zertifikat der Zertifizierungsstelle traut, wird dieses auf den Cloud Server kopiert.
-* `sudo scp /etc/ssl/certs/cacert.pem USERNAME@cloud.hartlab.de:~USERNAME/`
+* `sudo scp /etc/ssl/certs/cacert.pem USERNAME@wpp.hartlab.de:~USERNAME/`
 
 ### Konfigurationsanpassungen
 
