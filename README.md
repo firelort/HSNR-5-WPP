@@ -92,114 +92,77 @@ sudo -s
 apt install curl gnupg2 git lsb-release ssl-cert ca-certificates apt-transport-https tree locate software-properties-common dirmngr screen htop net-tools zip unzip curl ffmpeg ghostscript libfile-fcntllock-perl -y
 ```
 
-Da im späteren Verlauf weitere, spezifische Pakete gebraucht werden, müssen wir zusätzliche Software-Respositories zu unseren vorhandenen hinzufügen.
-Diese sind speziell für Nginx, PHP 7.x und MariaDB.  
-  
-```
-cd /etc/apt/sources.list.d
-echo "deb [arch=amd64] http://nginx.org/packages/mainline/ubuntu $(lsb_release -cs) nginx" | tee nginx.list
-echo "deb [arch=amd64] http://ppa.launchpad.net/ondrej/php/ubuntu $(lsb_release -cs) main" | tee php.list
-echo "deb [arch=amd64] http://ftp.hosteurope.de/mirror/mariadb.org/repo/10.4/ubuntu $(lsb_release -cs) main" | tee mariadb.list
-```
-
-Nun müssen noch die erforderlichen Keys geladen werden um den neuen Quellen zu vertrauen. (In der Reihenfolge: Nginx, PHP and MariaDB).
-
-```
-curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
-apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 4F4EA0AAE5267A6C
-apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
-```
-
-Nun updaten wir noch einmal den Server und generieren selbst-signierte Zertifikate. Letztere werden später nicht mehr gebraucht.
+Nun updaten wir noch einmal den Server.
 
 ```
 apt update && apt upgrade -y
-make-ssl-cert generate-default-snakeoil -y
 ```
 
-Zum Abschluss der Vorbereitung werden alte Instanzen, falls vorhanden, von Nginx entfernt.
+Zum Abschluss der Vorbereitung werden alte Instanzen, falls vorhanden, von Nginx entfernt. Das machen wir um sicherzugehen, dass keine Anwendung auf Port 80 läuft. 
 
 ```
 apt remove nginx nginx-extras nginx-common nginx-full -y --allow-change-held-packages
 ```
 
-#### Installation und Konfigurierung von Nginx
+#### Installation und Konfigurierung von Apache2
 
-Als Webserver benutzen wir für diese Serverkonfiguration Nginx. Dieser wird im späteren Verlauf auch zur Installation von phpLDAPadmin genutzt.  
+Als Webserver benutzen wir für diese Serverkonfiguration Apache2. Dieser wird im späteren Verlauf auch zur Installation von phpLDAPadmin genutzt.  
   
-
-
-Zuerst gehen wir sicher, dass keine Instanz von Apache läuft und installieren dann Nginx. Ersteres machen wir um sicherzugehen, dass keine Anwendung auf Port 80 läuft. 
-
 ```
-systemctl stop apache2.service && systemctl disable apache2.service
-apt install nginx -y
-systemctl enable nginx.service
+apt install apache2 php7.2 php7.2-gd php7.2-json php7.2-mysql php7.2-curl php7.2-mbstring php7.2-intl php7.2-imagick php7.2-xml php7.2-zip libapache2-mod-php7.2 -y
+systemctl enable apache2.service
 ```
 
-Nun werden die default-Einstellungen von Nginx für unsere Bedürfnisse angepasst. Vor den Änderungen wird ein Backup der Datei erstellt...  
+Nun werden die Einstellungen von Apache für unsere Bedürfnisse angepasst. Dazu fügen wir Dateien für Nextcloud und phpLDAPAdmin hinzu.
 
 ```
-mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak && touch /etc/nginx/nginx.conf
-nano /etc/nginx/nginx.conf
+touch /etc/apache2/sites-available/nextcloud.conf && touch /etc/apache2/sites-available/ldapapdmin.conf
+nano /etc/apache2/sites-available/nextcloud.conf
 ```
 
-... und folgende Einstellungen übernommen:
+Folgende Einstellungen werden für die Nextcloud übernommen:
 
 ```
-user www-data;
-worker_processes auto;
-pid /var/run/nginx.pid;
-events {
-    worker_connections 1024;
-    multi_accept on; use epoll;
-}
-http {
-    server_names_hash_bucket_size 64;
-    upstream php-handler {
-        server unix:/run/php/php7.3-fpm.sock;
-    }
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log warn;
-    set_real_ip_from 127.0.0.1;
-    set_real_ip_from 94.16.123.148; # Server-IP
-    real_ip_header X-Forwarded-For;
-    real_ip_recursive on;
-    include /etc/nginx/mime.types;
-    #include /etc/nginx/proxy.conf;
-    #include /etc/nginx/ssl.conf;
-    #include /etc/nginx/header.conf;
-    #include /etc/nginx/optimization.conf; 
-    default_type application/octet-stream;
-    sendfile on;
-    send_timeout 3600;
-    tcp_nopush on;
-    tcp_nodelay on;
-    open_file_cache max=500 inactive=10m;
-    open_file_cache_errors on;
-    keepalive_timeout 65;
-    reset_timedout_connection on;
-    server_tokens off;
-    resolver 94.16.123.148 valid=30s;
-    resolver_timeout 5s;
-    include /etc/nginx/conf.d/*.conf;
-}
+#nextcloud.conf
+<VirtualHost *:80>
+ServerName wpp.hartlab.de
+
+DocumentRoot /var/www
+
+<Directory /var/www/nextcloud/>
+  Options +FollowSymlinks
+  AllowOverride All
+
+ <IfModule mod_dav.c>
+  Dav off
+ </IfModule>
+
+ SetEnv HOME /var/www/nextcloud
+ SetEnv HTTP_HOME /var/www/nextcloud
+
+</Directory>
+RewriteEngine on
+RewriteCond %{SERVER_NAME} =wpp.hartlab.de
+RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+</VirtualHost>
 ```
 
-**Anmerkung:** Im http-Block sind die 4 includes (proxy.conf, ssl.conf, header.conf und optimization.conf) noch auskommentiert, diese werden erst später eingerichtet und eingesetzt.  
-  
-Nun testen und starten wir den Server um sicherzugehen, dass bei den Einstellungen nichts schief gelaufen ist.
-    
-```
-nginx -t && service nginx restart
-```    
-
-Zuletzt erstellen wir noch die benötigten Ordner für Nextcloud (nc_data) und Let's Encrypt (letsencrypt) und weisen diese der Gruppe www-data zu um Nginx Zugriff zu gewähren.
+Und folgende für ldapadmin:
 
 ```
-mkdir -p /var/nc_data /var/www/letsencrypt
-chown -R www-data:www-data /var/nc_data /var/www
+nano /etc/apache2/sites-available/ldapadmin.conf
 ```
+
+```
+Alias /ldapadmin "/var/www/ldapadmin/htdocs"
+<Directory /var/www/ldapadmin/htdocs>
+  Options +FollowSymlinks
+  AllowOverride All
+</Directory>
+```
+
+Im Grunde werden hier nur den lokalen Ordnern Adressen zugewiesen und im Falle von Nextcloud auch Weiterleitungen eingerichtet, damit alle Anfragen die sich auf Nextcloud beziehen an die Index Datei weitergeleitet werden.
+
 
 ### phpldapadmin
 
